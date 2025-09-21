@@ -120,7 +120,7 @@ class TreeNode:
 
         # Calculate weights as function of rank of average light received
         for idx in range(len(child_avg_light_amts)):
-            rank_pct = (idx / (len(child_avg_light_amts) - 1)) + kappa - 1.0
+            rank_pct = 1.0 if len(child_avg_light_amts) == 1 else (idx / (len(child_avg_light_amts) - 1)) + kappa - 1.0
             k, _ = child_avg_light_amts[idx]
             weight: float = weight_min
             if rank_pct >= 0.0:

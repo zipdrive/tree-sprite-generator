@@ -106,6 +106,8 @@ class TreeNode:
             kappa (float): Parameter in the range (0, 1]. Lower values make the branches receiving the most light be more aggressively supported.
         '''
         if len(self.children) == 0:
+            self.num_descendant_buds = 0
+            self.num_descendant_nodes = 0
             return
         
         # Determine the average amount of light being received by the buds from each child
@@ -318,11 +320,6 @@ class TreeStructure:
     The resting period after a new bud is formed before it itself can form a new bud.
     '''
 
-    proportionality: float 
-    '''
-    The parameter alpha determining how proportional vigor received is to light intake.
-    '''
-
     shadow_a: float 
     '''
     The shadow parameter a.
@@ -377,7 +374,6 @@ class TreeStructure:
 
     def __init__(self, \
                     prolepsis: int, \
-                    proportionality: float, \
                     shadow_a: float, \
                     shadow_b: float, \
                     shadow_voxel_size: float, \
@@ -394,7 +390,6 @@ class TreeStructure:
 
         Args:
             prolepsis (int): The number of cycles that a new bud rests for before it can start producing new buds. Set to 0 for sylleptic branching, or set to >0 for proleptic branching.
-            proportionality (float): How long branches will be, approximately proportional to the light they receive.
             shadow_a (float): Parameter for determining how buds overshadow other buds. Controls the magnitude of shadows.
             shadow_b (float): Parameter for determining how buds overshadow other buds. Controls the dropoff of shadows over increasing vertical distance.
             shadow_voxel_size (float): The resolution of shadow voxels.
@@ -405,7 +400,6 @@ class TreeStructure:
             cull_threshold (float): The threshold of average light gathered by a branch for that 
         '''
         self.prolepsis = prolepsis
-        self.proportionality = proportionality
         self.shadow_a = shadow_a
         self.shadow_b = shadow_b
         self.shadow_voxel_size = shadow_voxel_size
@@ -419,12 +413,19 @@ class TreeStructure:
         self.cull_threshold = cull_threshold
 
         # Create the root node
-        self.root = TreeNode(None, np.array([0.0, 0.0, self.proportionality]), self.prolepsis, main_stem=True)
+        self.root = TreeNode(None, np.array([0.0, 0.0, 1.0]), self.prolepsis, main_stem=True)
         self.root.apical_lambda = self.apical_lambda_fn(self.root)
         self.root.light = 1.0
         self.buds = [self.root]
     
-    def iterate(self):
+    def grow(self, vigor: float):
+        '''
+        Performs the next step of growth.
+
+        Args:
+            vigor (float): The vigor that is injected into the tree.
+        '''
+
         # Update light received by buds
         self.root.reset_light()
         voxels: TreeNodeShadowVoxels = TreeNodeShadowVoxels(self.shadow_a, self.shadow_b, self.shadow_voxel_size)
@@ -435,7 +436,7 @@ class TreeStructure:
         self.root.propagate_light(self.priority_min, 1.0, self.priority_kappa) # Updates the light received by parent nodes, grandparent nodes, etc.
 
         # Update vigor of each bud
-        self.root.distribute_vigor(self.proportionality * self.root.light)
+        self.root.distribute_vigor(vigor)
 
         # Sprout new branches from buds
         for k in range(len(self.buds)):

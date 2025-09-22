@@ -91,6 +91,6 @@ class TreeSkeletonImager:
         Args:
             filename (str): The path of the file to save to.
         '''
-        img: Image = Image(150, 400)
+        img: Image = Image(300, 400)
         self.render_node(img, np.array((0.0, 0.0, 0.0)), self.structure.root)
         img.save(filename)

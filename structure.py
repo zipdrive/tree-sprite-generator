@@ -1,7 +1,7 @@
 import math
 import random
 import numpy as np
-from typing import Self
+from typing import Callable, Self
 
 def normalized(vec: np.array) -> np.array:
     '''
@@ -13,6 +13,11 @@ def normalized(vec: np.array) -> np.array:
 class TreeNode:
     '''
     Data structure representing a node of the tree's structure.
+    '''
+
+    main_stem: bool 
+    '''
+    True if this node is on the "main" stem. False otherwise.
     '''
 
     parent: Self 
@@ -65,7 +70,7 @@ class TreeNode:
     How long this bud has to wait for before it can start producing new buds.
     '''
 
-    def __init__(self, parent: Self, local_vector: np.array, prolepsis: int, apical_lambda: float):
+    def __init__(self, parent: Self, local_vector: np.array, prolepsis: int, main_stem: bool = False):
         self.parent = parent 
         self.children = []
         self.children_weights = []
@@ -73,7 +78,7 @@ class TreeNode:
         self.num_descendant_nodes = 0
         self.local_vector = local_vector
         self.remaining_resting_period = prolepsis
-        self.apical_lambda = apical_lambda
+        self.main_stem = main_stem
 
     def get_global_vector(self) -> np.array:
         '''
@@ -87,6 +92,7 @@ class TreeNode:
         Call this function before calculating light.
         '''
         self.light = 0
+        self.vigor = 0
         for k in range(len(self.children)):
             self.children[k].reset_light()
 
@@ -120,11 +126,10 @@ class TreeNode:
 
         # Calculate weights as function of rank of average light received
         for idx in range(len(child_avg_light_amts)):
-            rank_pct = 1.0 if len(child_avg_light_amts) == 1 else (idx / (len(child_avg_light_amts) - 1)) + kappa - 1.0
+            rank_pct = 1.0 if len(child_avg_light_amts) == 1 else (idx / (len(child_avg_light_amts) - 1))
+            x: float = min(1.0, (1.0 - rank_pct) / kappa)
             k, _ = child_avg_light_amts[idx]
-            weight: float = weight_min
-            if rank_pct >= 0.0:
-                weight += (weight_max - weight_min) * rank_pct / kappa
+            weight: float = weight_max + ((weight_min - weight_max) * x)
             self.children_weights[k] = weight
 
     def distribute_vigor(self, vigor_received: float):
@@ -143,19 +148,27 @@ class TreeNode:
             except ZeroDivisionError:
                 self.children[k].distribute_vigor(0.0)
 
-    def cull(self, culling_ratio: float):
+    def cull(self, culling_threshold: float) -> list[Self]:
         '''
-        Culls the descendants of this node if the ratio of the total light received from the buds relative to the total number of descendants of this node falls below a certain threshold.
+        Culls any bud children of this node if the light received from that bud falls below a certain threshold.
 
         Args:
             culling_ratio (float): The threshold at which to cull.
+
+        Returns:
+            A list of all descendant buds.
         '''
         if self.num_descendant_nodes > 0:
-            if self.light / self.num_descendant_nodes < culling_ratio:
+            if self.light / self.num_descendant_nodes < culling_threshold:
                 self.children = []
+                return [self]
             else:
+                buds: list[Self] = []
                 for k in range(len(self.children)):
-                    self.children[k].cull(culling_ratio)
+                    buds += self.children[k].cull(culling_threshold)
+                return buds
+        else:
+            return [self]
 
 
 class TreeNodeShadowVoxel:
@@ -243,7 +256,7 @@ class TreeNodeShadowVoxels:
             for key_above_idx in range(key_idx + 1, len(keys)):
                 key_above: tuple[int, int, int] = keys[key_above_idx]
                 if abs(key_above[0] - key[0]) < key_above[2] - key[2] and abs(key_above[1] - key[1]) < key_above[2] - key[2]:
-                    voxel.shadow += self.shadow_a * math.pow(self.shadow_b, key_above[2] - key[2])
+                    voxel.shadow += self.shadow_a * math.pow(self.shadow_b, key[2] - key_above[2])
 
             # Apply shadows to each bud inside the voxel
             for k in range(len(voxel.nodes)):
@@ -271,7 +284,7 @@ class TreeNodeShadowVoxels:
                                 if key_above_z > key_adj[2] and \
                                     abs(key_above_x - key_adj[0]) < key_above_z - key_adj[2] and \
                                     abs(key_above_y - key_adj[1]) < key_above_z - key_adj[2]:
-                                    adj_voxel.shadow += self.shadow_a * math.pow(self.shadow_b, key_above_z - key_adj[2])
+                                    adj_voxel.shadow += self.shadow_a * math.pow(self.shadow_b, key_adj[2] - key_above_z)
 
                         # Check if adjacent voxel has lowest shadow found so far
                         if self.voxels[key_adj].shadow < least_shadow:
@@ -334,7 +347,7 @@ class TreeStructure:
     In nature, this angle is usually one of the following: [1/3, 2/5, 3/8, 5/13]
     '''
 
-    apical_lambda: float 
+    apical_lambda_fn: Callable[[TreeNode], float] 
 
     growth_zeta: float 
     '''
@@ -371,7 +384,7 @@ class TreeStructure:
                     priority_min: float, \
                     priority_kappa: float, \
                     apical_theta: float, \
-                    apical_lambda: float, \
+                    apical_lambda_fn: Callable[[TreeNode], float], \
                     growth_zeta: float, \
                     growth_eta: float, \
                     initial_tropism: np.array, \
@@ -399,14 +412,15 @@ class TreeStructure:
         self.priority_min = priority_min
         self.priority_kappa = priority_kappa
         self.apical_theta = apical_theta
-        self.apical_lambda = apical_lambda
+        self.apical_lambda_fn = apical_lambda_fn
         self.growth_zeta = growth_zeta
         self.growth_eta = growth_eta
         self.tropism = initial_tropism
         self.cull_threshold = cull_threshold
 
         # Create the root node
-        self.root = TreeNode(None, np.array([0.0, 0.0, self.proportionality]), self.prolepsis, self.apical_lambda)
+        self.root = TreeNode(None, np.array([0.0, 0.0, self.proportionality]), self.prolepsis, main_stem=True)
+        self.root.apical_lambda = self.apical_lambda_fn(self.root)
         self.root.light = 1.0
         self.buds = [self.root]
     
@@ -424,7 +438,6 @@ class TreeStructure:
         self.root.distribute_vigor(self.proportionality * self.root.light)
 
         # Sprout new branches from buds
-        new_buds: list[TreeNode] = []
         for k in range(len(self.buds)):
             bud: TreeNode = self.buds[k]
             if bud.remaining_resting_period == 0 and bud.vigor >= 1.0:
@@ -440,25 +453,23 @@ class TreeStructure:
                     if n == 0:
                         expected_direction = straight_direction
                     else:
-                        twist += math.tau / (num_sprouts - 1)
+                        twist += random.random() * math.tau / (num_sprouts - 1)
                         expected_direction = (math.cos(self.apical_theta) * straight_direction) + (math.sin(self.apical_theta) * ((math.cos(twist) * straight_normal_direction1) + (math.sin(twist) * straight_normal_direction2)))
-                    bud.children.append( \
-                        TreeNode( \
-                            parent=bud, \
-                            local_vector=sprout_length * ( \
-                                (expected_direction * (1.0 - self.growth_zeta - self.growth_eta)) + \
-                                (optimal_growth_direction * self.growth_zeta) + \
-                                (self.tropism * self.growth_eta) \
-                            ), \
-                            prolepsis=self.prolepsis, \
-                            apical_lambda=self.apical_lambda \
-                        ) \
+                    new_bud: TreeNode = TreeNode( \
+                        parent=bud, \
+                        local_vector=sprout_length * ( \
+                            (expected_direction * (1.0 - self.growth_zeta - self.growth_eta)) + \
+                            (optimal_growth_direction * self.growth_zeta) + \
+                            (self.tropism * self.growth_eta) \
+                        ), \
+                        prolepsis=self.prolepsis, \
+                        main_stem=(bud.main_stem and n == 0)
                     )
+                    new_bud.apical_lambda = self.apical_lambda_fn(new_bud)
+                    bud.children.append(new_bud)
                     bud.children_weights.append(1.0)
-                new_buds += bud.children
             else:
                 bud.remaining_resting_period -= 1
-                new_buds.append(bud)
         
         # Cull branches
-        self.root.cull(self.cull_threshold)
+        self.buds = self.root.cull(self.cull_threshold)

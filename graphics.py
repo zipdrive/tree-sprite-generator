@@ -81,7 +81,7 @@ class TreeSkeletonImager:
                 img[x, y] = (luma, luma, luma, 255)
         node_global_position: np.array = parent_global_position + node.local_vector
         for k in range(len(node.children)):
-            print(f"  Child node: {node.children[k].local_vector}")
+            #print(f"  ({node} is parent of {node.children[k]}): {node.children[k].local_vector}")
             self.render_node(img, node_global_position, node.children[k])
 
     def render(self, filename):

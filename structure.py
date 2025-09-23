@@ -1,14 +1,14 @@
+from __future__ import annotations
 import math
 import random
 import numpy as np
-from typing import Callable, Self
+from typing import Callable, Self, Any
 
-def normalized(vec: np.array) -> np.array:
+def normalized(vec: np.typing.NDArray[Any]) -> np.typing.NDArray[Any]:
     '''
     Normalizes a vector.
     '''
     return vec / np.linalg.norm(vec)
-
 
 class TreeNode:
     '''
@@ -20,17 +20,123 @@ class TreeNode:
     True if this node is on the "main" stem. False otherwise.
     '''
 
-    parent: Self 
+    parent: TreeBranch | None
     '''
     The parent node.
     '''
 
-    children: list[Self]
+    light: float 
+    '''
+    How much light the node receives, either from its leaves or from its children.
+    '''
+
+    vigor: float 
+    '''
+    How much vigor the node receives from its parent.
+    '''
+
+    def __init__(self, parent: TreeBranch | None, local_vector: np.typing.NDArray[Any], prolepsis: int, main_stem: bool = False):
+        self.parent = parent 
+        self.local_vector = local_vector
+        self.main_stem = main_stem
+
+    def get_descendant_buds(self) -> int:
+        '''
+        Gets the number of descendant buds.
+        '''
+        return 0 
+
+    def get_descendant_nodes(self) -> int:
+        '''
+        Gets the number of descendant nodes.
+        '''
+        return 0
+
+    def get_global_vector(self) -> np.typing.NDArray[Any]:
+        '''
+        The global position of the end of the node.
+        '''
+        return (self.parent.get_global_vector() + self.local_vector) if self.parent != None else self.local_vector
+
+    def reset_light(self):
+        '''
+        Resets the light received by the node and its children to 0.
+        Call this function before calculating light.
+        '''
+        pass
+
+    def propagate_light(self, weight_min: float, weight_max: float, kappa: float):
+        '''
+        Propagates light received from the buds up to the root, and recalculates the weight of each child.
+
+        Args:
+            weight_min (float): The minimum weight of a child.
+            weight_max (float): The maximum weight of a child.
+            kappa (float): Parameter in the range (0, 1]. Lower values make the branches receiving the most light be more aggressively supported.
+        '''
+        pass
+
+    def distribute_vigor(self, vigor_received: float):
+        '''
+        Distributes vigor to the children of the node.
+
+        Args:
+            vigor_received (float): The vigor received from the parent.
+        '''
+        self.vigor = vigor_received
+
+    def cull(self, culling_ratio: float) -> list[TreeBud]:
+        '''
+        Culls any bud children of this node if the light received from that bud falls below a certain threshold.
+
+        Args:
+            culling_ratio (float): The threshold at which to cull.
+
+        Returns:
+            A list of all descendant buds.
+        '''
+        return []
+
+
+class TreeBud(TreeNode):
+    default_orientation: np.typing.NDArray[Any]
+    '''
+    The default orientation of a branch sprouting from this bud.
+    '''
+
+    remaining_resting_period: int 
+    '''
+    How long this bud has to wait for before it can start producing new buds.
+    '''
+
+    def __init__(self, parent: TreeBranch, local_vector: np.typing.NDArray[Any], prolepsis: int, main_stem: bool = False):
+        super().__init__(parent, local_vector, main_stem)
+        self.remaining_resting_period = prolepsis
+
+    def reset_light(self):
+        '''
+        Resets the light received by the node and its children to 0.
+        Call this function before calculating light.
+        '''
+        self.light = 0
+        self.vigor = 0
+
+    def cull(self, culling_ratio: float) -> list[TreeBud]:
+        return [self]
+
+
+class TreeBranch(TreeNode):
+    local_vector: np.typing.NDArray[Any]
+    '''
+    The direction and magnitude of the branch, relative to the end of the previous node.
+    '''
+
+    children: list[TreeNode]
     '''
     The child nodes.
     '''
 
-    children_weights: np.array 
+    children_weights: list[float]
     '''
     The amount that each child node is favored.
     '''
@@ -45,83 +151,46 @@ class TreeNode:
     The total number of nodes which are descendants of this node.
     '''
 
-    local_vector: np.array
-    '''
-    The direction and magnitude of the end of the node, relative to the end of the previous node.
-    '''
-
     apical_lambda: float 
     '''
-    Parameter for apical preference. Controls whether the main branch or lateral branches are favored more.
+    Parameter for apical preference. Controls whether the main child or lateral children are favored more.
     '''
 
-    light: float 
-    '''
-    How much light the node receives, either from its leaves or from its children.
-    '''
-
-    vigor: float 
-    '''
-    How much vigor the node receives from its parent.
-    '''
-
-    remaining_resting_period: int 
-    '''
-    How long this bud has to wait for before it can start producing new buds.
-    '''
-
-    def __init__(self, parent: Self, local_vector: np.array, prolepsis: int, main_stem: bool = False):
-        self.parent = parent 
+    def __init__(self, parent: TreeBranch | None, local_vector: np.typing.NDArray[Any], main_stem: bool = False):
+        super().__init__(parent, local_vector, main_stem)
         self.children = []
         self.children_weights = []
         self.num_descendant_buds = 0
         self.num_descendant_nodes = 0
-        self.local_vector = local_vector
-        self.remaining_resting_period = prolepsis
-        self.main_stem = main_stem
 
-    def get_global_vector(self) -> np.array:
-        '''
-        The global position of the end of the node.
-        '''
-        return (self.parent.get_global_vector() + self.local_vector) if self.parent != None else self.local_vector
+    def get_descendant_buds(self) -> int:
+        return self.num_descendant_buds
+    
+    def get_descendant_nodes(self) -> int:
+        return self.num_descendant_nodes
 
     def reset_light(self):
-        '''
-        Resets the light received by the node and its children to 0.
-        Call this function before calculating light.
-        '''
         self.light = 0
         self.vigor = 0
         for k in range(len(self.children)):
             self.children[k].reset_light()
-
+            
     def propagate_light(self, weight_min: float, weight_max: float, kappa: float):
-        '''
-        Propagates light received from the buds up to the root, and recalculates the weight of each child.
-
-        Args:
-            weight_min (float): The minimum weight of a child.
-            weight_max (float): The maximum weight of a child.
-            kappa (float): Parameter in the range (0, 1]. Lower values make the branches receiving the most light be more aggressively supported.
-        '''
-        if len(self.children) == 0:
-            self.num_descendant_buds = 0
-            self.num_descendant_nodes = 0
-            return
-        
         # Determine the average amount of light being received by the buds from each child
         self.num_descendant_buds = 0
         self.num_descendant_nodes = 0
         child_avg_light_amts: list[tuple[int, float]] = []
         for k in range(len(self.children)):
-            child: Self = self.children[k]
+            child: TreeNode = self.children[k]
             child.propagate_light(weight_min, weight_max, kappa)
-            child_num_buds: int = child.num_descendant_buds + (1 if len(child.children) == 0 else 0)
+            child_num_buds: int = child.get_descendant_buds() + (1 if isinstance(child, TreeBud) else 0)
             self.num_descendant_buds += child_num_buds
-            self.num_descendant_nodes += child.num_descendant_nodes + 1
+            self.num_descendant_nodes += child.get_descendant_nodes() + 1
             self.light += child.light
-            child_avg_light_amts.append((k, (self.apical_lambda if k == 0 else (1.0 - self.apical_lambda)) * child.light / child_num_buds))
+            if child_num_buds == 0:
+                child_avg_light_amts.append((k, 0.0))
+            else:
+                child_avg_light_amts.append((k, (self.apical_lambda if k == 0 else (1.0 - self.apical_lambda)) * child.light / child_num_buds))
 
         # Sort in order of average light received
         child_avg_light_amts.sort(key=lambda tup: tup[1])
@@ -135,12 +204,6 @@ class TreeNode:
             self.children_weights[k] = weight
 
     def distribute_vigor(self, vigor_received: float):
-        '''
-        Distributes vigor to the children of the node.
-
-        Args:
-            vigor_received (float): The vigor received from the parent.
-        '''
         self.vigor = vigor_received
         child_ratios: list[float] = [self.children[k].light * self.children_weights[k] for k in range(len(self.children))]
         total_child_ratios: float = sum(child_ratios)
@@ -150,27 +213,17 @@ class TreeNode:
             except ZeroDivisionError:
                 self.children[k].distribute_vigor(0.0)
 
-    def cull(self, culling_threshold: float) -> list[Self]:
-        '''
-        Culls any bud children of this node if the light received from that bud falls below a certain threshold.
-
-        Args:
-            culling_ratio (float): The threshold at which to cull.
-
-        Returns:
-            A list of all descendant buds.
-        '''
-        if self.num_descendant_nodes > 0:
-            if self.light / self.num_descendant_nodes < culling_threshold:
-                self.children = []
-                return [self]
-            else:
-                buds: list[Self] = []
-                for k in range(len(self.children)):
-                    buds += self.children[k].cull(culling_threshold)
-                return buds
+    def cull(self, culling_ratio: float) -> list[TreeBud]:
+        if hasattr(self, 'light') and self.num_descendant_nodes > 0 and self.light / self.num_descendant_nodes < culling_ratio:
+            print(f"  {self.num_descendant_nodes} nodes ({self.num_descendant_buds} buds) culled.")
+            self.children = []
+            return []
         else:
-            return [self]
+            buds: list[TreeBud] = []
+            for k in range(len(self.children)):
+                buds += self.children[k].cull(culling_ratio)
+            return buds
+
 
 
 class TreeNodeShadowVoxel:
@@ -188,12 +241,12 @@ class TreeNodeShadowVoxel:
     How much the voxel is shaded.
     '''
 
-    optimal_growth_direction: np.array 
+    optimal_growth_direction: np.typing.NDArray[Any] 
     '''
     The optimal growth direction for buds inside this voxel.
     '''
 
-    def __init__(self, startingNode: TreeNode = None):
+    def __init__(self, startingNode: TreeNode | None = None):
         self.nodes = [startingNode] if startingNode != None else []
         self.shadow = 0.0
 
@@ -235,7 +288,7 @@ class TreeNodeShadowVoxels:
         Args:
             bud (TreeNode): The bud to add.
         '''
-        bud_global_vector: np.array = bud.get_global_vector()
+        bud_global_vector: np.typing.NDArray[Any] = bud.get_global_vector()
         x: int = int(math.floor((float(bud_global_vector[0]) / self.shadow_voxel_size) + 0.5))
         y: int = int(math.floor((float(bud_global_vector[1]) / self.shadow_voxel_size) + 0.5))
         z: int = int(math.floor((float(bud_global_vector[2]) / self.shadow_voxel_size) + 0.5))
@@ -268,7 +321,7 @@ class TreeNodeShadowVoxels:
         for key_idx in range(len(keys)):
             key: tuple[int, int, int] = keys[key_idx]
             least_shadow: float = math.inf
-            least_shadow_dir: np.array = np.array((0.0, 0.0, 1.0))
+            least_shadow_dir: np.typing.NDArray[Any] = np.array((0.0, 0.0, 1.0))
 
             x, y, z = key
             for dx in [0, -1, 1]:
@@ -296,14 +349,14 @@ class TreeNodeShadowVoxels:
             # Record the direction of the voxel with the least amount of shadow
             self.voxels[key].optimal_growth_direction = least_shadow_dir
 
-    def get_optimal_growth_direction(self, bud: TreeNode) -> np.array:
+    def get_optimal_growth_direction(self, bud: TreeNode) -> np.typing.NDArray[Any]:
         '''
         Finds the optimal growth direction for the bud.
 
         Args:
             bud (TreeNode): The bud to get the optimal growth direction for.
         '''
-        bud_global_vector: np.array = bud.get_global_vector()
+        bud_global_vector: np.typing.NDArray[Any] = bud.get_global_vector()
         x: int = int(math.floor((float(bud_global_vector[0]) / self.shadow_voxel_size) + 0.5))
         y: int = int(math.floor((float(bud_global_vector[1]) / self.shadow_voxel_size) + 0.5))
         z: int = int(math.floor((float(bud_global_vector[2]) / self.shadow_voxel_size) + 0.5))
@@ -356,7 +409,7 @@ class TreeStructure:
     The growth direction parameter eta.
     '''
 
-    tropism: np.array 
+    tropism: np.typing.NDArray[Any] 
     '''
     The tropism vector.
     '''
@@ -367,24 +420,24 @@ class TreeStructure:
     The root of the tree.
     '''
 
-    buds: list[TreeNode]
+    buds: list[TreeBud]
     '''
     The terminal ends of the tree.
     '''
 
     def __init__(self, \
                     prolepsis: int, \
-                    shadow_a: float, \
-                    shadow_b: float, \
-                    shadow_voxel_size: float, \
                     priority_min: float, \
                     priority_kappa: float, \
                     apical_theta: float, \
                     apical_lambda_fn: Callable[[TreeNode], float], \
                     growth_zeta: float, \
                     growth_eta: float, \
-                    initial_tropism: np.array, \
-                    cull_threshold: float):
+                    initial_tropism: np.typing.NDArray[Any] = np.array([0.0, 0.0, -1.0]), \
+                    shadow_a: float = 1.0, \
+                    shadow_b: float = 1.001, \
+                    shadow_voxel_size: float = 2.0, \
+                    cull_threshold: float = 0.15):
         '''
         Initializes a tree.
 
@@ -413,10 +466,13 @@ class TreeStructure:
         self.cull_threshold = cull_threshold
 
         # Create the root node
-        self.root = TreeNode(None, np.array([0.0, 0.0, 1.0]), self.prolepsis, main_stem=True)
+        self.root = TreeBranch(None, np.array([0.0, 0.0, 1.0]), main_stem=True)
+        first_bud: TreeBud = TreeBud(self.root, self.root.local_vector, 0, main_stem=True)
         self.root.apical_lambda = self.apical_lambda_fn(self.root)
         self.root.light = 1.0
-        self.buds = [self.root]
+        self.root.children = [first_bud]
+        self.root.children_weights = [1.0]
+        self.buds = [first_bud]
     
     def grow(self, vigor: float):
         '''
@@ -441,35 +497,49 @@ class TreeStructure:
         # Sprout new branches from buds
         for k in range(len(self.buds)):
             bud: TreeNode = self.buds[k]
-            if bud.remaining_resting_period == 0 and bud.vigor >= 1.0:
-                num_sprouts: int = math.floor(bud.vigor)
-                sprout_length: float = bud.vigor / num_sprouts
-                straight_direction: np.array = normalized(bud.local_vector)
-                straight_normal_direction1: np.array = normalized(np.array([0.0, -straight_direction[2], straight_direction[1]]))
-                straight_normal_direction2: np.array = np.cross(straight_direction, straight_normal_direction1)
-                optimal_growth_direction: np.array = voxels.get_optimal_growth_direction(bud)
+            if bud.remaining_resting_period == 0 and bud.vigor >= 1.0: # Sprout if bud is not resting and has enough resources to grow
+
+                # Determine how many buds to sprout from the end of the new branch
+                num_sprouted_buds: int = math.floor(bud.vigor)
+                branch_length: float = bud.vigor / num_sprouted_buds
+
+                # Determine the directions of each bud
+                straight_direction: np.typing.NDArray[Any] = normalized(bud.local_vector)
+                straight_normal_direction1: np.typing.NDArray[Any] = normalized(np.array([0.0, -straight_direction[2], straight_direction[1]]))
+                straight_normal_direction2: np.typing.NDArray[Any] = np.cross(straight_direction, straight_normal_direction1)
+                optimal_growth_direction: np.typing.NDArray[Any] = voxels.get_optimal_growth_direction(bud)
                 twist: float = random.random() * math.tau 
-                for n in range(num_sprouts):
-                    expected_direction: np.array
+
+                # Create the new branch
+                branch: TreeBranch = TreeBranch(bud.parent, straight_direction * branch_length, bud.main_stem)
+                branch.apical_lambda = self.apical_lambda_fn(branch)
+
+                # Create the buds sprouting from the end of the new branch
+                for n in range(num_sprouted_buds):
+                    expected_direction: np.typing.NDArray[Any]
                     if n == 0:
                         expected_direction = straight_direction
                     else:
-                        twist += random.random() * math.tau / (num_sprouts - 1)
+                        twist += random.random() * math.tau / (num_sprouted_buds - 1)
                         expected_direction = (math.cos(self.apical_theta) * straight_direction) + (math.sin(self.apical_theta) * ((math.cos(twist) * straight_normal_direction1) + (math.sin(twist) * straight_normal_direction2)))
-                    new_bud: TreeNode = TreeNode( \
-                        parent=bud, \
-                        local_vector=sprout_length * ( \
+                    new_bud: TreeBud = TreeBud( \
+                        parent=branch, \
+                        local_vector=\
                             (expected_direction * (1.0 - self.growth_zeta - self.growth_eta)) + \
                             (optimal_growth_direction * self.growth_zeta) + \
                             (self.tropism * self.growth_eta) \
-                        ), \
-                        prolepsis=self.prolepsis, \
+                        , \
+                        prolepsis=0 if n == 0 else self.prolepsis, \
                         main_stem=(bud.main_stem and n == 0)
                     )
                     new_bud.apical_lambda = self.apical_lambda_fn(new_bud)
-                    bud.children.append(new_bud)
-                    bud.children_weights.append(1.0)
-            else:
+                    branch.children.append(new_bud)
+                    branch.children_weights.append(1.0)
+
+                # Replace the old bud with the new branch
+                bud_index: int = bud.parent.children.index(bud)
+                bud.parent.children[bud_index] = branch
+            elif bud.remaining_resting_period > 0:
                 bud.remaining_resting_period -= 1
         
         # Cull branches

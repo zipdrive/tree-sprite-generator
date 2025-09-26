@@ -86,7 +86,7 @@ class TreeSkeletonRenderer(Renderer):
             y: int = img.height - int(round(self.zoom * pos[2]))
             luma: int = min(255, max(0, int(round(255 * (0.5 + (0.5 * self.zoom * pos[1] / img.width))))))
             if x >= 0 and x < img.width and y >= 0 and y < img.height:
-                existing_luma, _, _, _ = img[x, y]
+                _, existing_luma, _, _ = img[x, y]
                 luma = max(existing_luma, luma)
                 img[x, y] = (0 if isinstance(node, TreeBud) else luma, luma, 0 if isinstance(node, TreeBud) else  luma, 255)
         node_global_position: np.typing.NDArray[typing.Any] = parent_global_position + node.local_vector
@@ -94,6 +94,79 @@ class TreeSkeletonRenderer(Renderer):
             for k in range(len(node.children)):
                 #print(f"  ({node} is parent of {node.children[k]}): {node.children[k].local_vector}")
                 self.render_node(img, node_global_position, node.children[k])
+
+    def render(self, structure: TreeStructure, filename: str):
+        '''
+        Renders the skeleton of the tree to a PNG file.
+
+        Args:
+            structure (TreeStructure): The structure of the tree to render.
+            filename (str): The path of the file to save to.
+        '''
+        img: Image = Image(300, 400)
+        self.render_node(img, np.array((0.0, 0.0, 0.0)), structure.root)
+        img.save(filename)
+
+class TreeRenderer(Renderer):
+    '''
+    A renderer that renders a tree.
+    '''
+
+    width_parameter: float 
+    '''
+    Controls the width of branches, relative to their descendants.
+    '''
+
+    zoom: float 
+    '''
+    How much to zoom in by.
+    '''
+
+    def __init__(self, width_parameter: float = 2.0, zoom: float = 1.0):
+        self.width_parameter = width_parameter
+        self.zoom = zoom 
+
+    def render_node(self, img: Image, parent_global_position: np.typing.NDArray[typing.Any], node: TreeNode) -> float:
+        '''
+        Renders the skeleton of a single node in a tree.
+        '''
+
+        # Render children
+        node_global_position: np.typing.NDArray[typing.Any] = parent_global_position + node.local_vector
+        width: float = 0.0
+        if isinstance(node, TreeBranch) and len(node.children) > 0:
+            for k in range(len(node.children)):
+                width += pow(self.render_node(img, node_global_position, node.children[k]), self.width_parameter)
+        else:
+            width = 1.0
+
+        # Calculate the width of the branch
+        width = pow(width, 1.0 / self.width_parameter)
+        #print(f"    Descendant node count: {node.get_descendant_nodes()}")
+        #print(f"    Branch width: {width}")
+
+        # Render the branch
+        length: float = np.linalg.norm(node.local_vector)
+        unit: np.typing.NDArray[typing.Any] = (0.5 / self.zoom) * node.local_vector / length
+        num_units: int = math.ceil(length * self.zoom / 0.5)
+        for n in range(num_units):
+            pos_base: np.typing.NDArray[typing.Any] = parent_global_position + (n * unit)
+            vec1: np.typing.NDArray[typing.Any] = np.array([unit[1], -unit[0], 0.0]) / math.sqrt(pow(unit[0], 2.0) + pow(unit[1], 2.0)) if abs(unit[0]) > 0.001 or abs(unit[1]) > 0.001 else np.array([1.0, 0.0, 0.0])
+            vec2: np.typing.NDArray[typing.Any] = np.cross(unit, vec1) / np.linalg.norm(unit)
+            angle: float = 0.0
+            while angle < math.tau:
+                pos: np.typing.NDArray[typing.Any] = pos_base + ((width * 0.25 / self.zoom) * ((math.cos(angle) * vec1) + (math.sin(angle) * vec2)))
+                x: int = (img.width // 2) + int(round(self.zoom * pos[0]))
+                y: int = img.height - int(round(self.zoom * pos[2]))
+                luma: int = min(255, max(0, int(round(255 * (0.5 + (0.5 * self.zoom * pos[1] / img.width))))))
+                if x >= 0 and x < img.width and y >= 0 and y < img.height:
+                    _, existing_luma, _, _ = img[x, y]
+                    luma = max(existing_luma, luma)
+                    img[x, y] = (0 if isinstance(node, TreeBud) else luma, luma, 0 if isinstance(node, TreeBud) else  luma, 255)
+
+                angle += math.pi / (width * self.zoom)
+
+        return width
 
     def render(self, structure: TreeStructure, filename: str):
         '''

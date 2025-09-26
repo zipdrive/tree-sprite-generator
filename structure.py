@@ -215,7 +215,7 @@ class TreeBranch(TreeNode):
 
     def cull(self, culling_ratio: float) -> list[TreeBud]:
         if hasattr(self, 'light') and self.num_descendant_nodes > 0 and self.light / self.num_descendant_nodes < culling_ratio:
-            print(f"  {self.num_descendant_nodes} nodes ({self.num_descendant_buds} buds) culled.")
+            print(f"  {self.num_descendant_nodes} nodes ({self.num_descendant_buds} buds) culled. Total light collected from buds was {self.light}.")
             self.children = []
             return []
         else:
@@ -224,6 +224,162 @@ class TreeBranch(TreeNode):
                 buds += self.children[k].cull(culling_ratio)
             return buds
 
+
+
+
+class TreeStructureHyperparameters:
+    vigor: float 
+    '''
+    Parameter that controls how many branches are sprouted.
+    '''
+
+    priority_min: float 
+    '''
+    The weight of low-priority branches in terms of receiving growth resources.
+    '''
+
+    priority_kappa: float
+    '''
+    Parameter in the range (0, 1]. Lower values increase the strictness of which branches are considered high-priority.
+    '''
+
+    apical_theta: float 
+    '''
+    The angle at which new branches are branched off.
+    In nature, this angle is usually one of the following: [PI*1/3, PI*2/5, PI*3/8, PI*5/13]
+    '''
+    
+    main_stem_apical_lambda: float 
+    '''
+    Controls how much the primary branch is favored in the main stem.
+    '''
+
+    lateral_stem_apical_lambda: float
+    '''
+    Controls how much the primary branch is favored in the lateral stems.
+    '''
+
+    growth_zeta: float 
+    '''
+    The growth direction parameter zeta.
+    '''
+
+    tropism: np.typing.NDArray[Any] 
+    '''
+    The tropism vector.
+    '''
+
+    shadow_a: float 
+    '''
+    The shadow parameter a.
+    '''
+
+    shadow_b: float 
+    '''
+    The shadow parameter b.
+    '''
+
+    shadow_voxel_size: float 
+    '''
+    The size of shadow voxels.
+    '''
+
+    cull_threshold: float
+    '''
+    The threshold to cull branches at.
+    '''
+
+    def __init__(self, \
+                    vigor: float = 1.0, \
+                    priority_min: float = 0.9, \
+                    priority_kappa: float = 0.75, \
+                    apical_theta: float = math.pi * 2 / 5, \
+                    main_stem_apical_lambda: float = 0.9, \
+                    lateral_stem_apical_lambda: float = 0.9, \
+                    growth_zeta: float = 0.2, \
+                    tropism: np.typing.NDArray[Any] = np.array((0.0, 0.0, -0.05)), \
+                    shadow_a: float = 1.0, \
+                    shadow_b: float = 16.0, \
+                    shadow_voxel_size: float = 1.0, \
+                    cull_threshold: float = 0.01):
+        '''
+        Args:
+            prolepsis (int): The number of cycles that a new bud rests for before it can start producing new buds. Set to 0 for sylleptic branching, or set to >0 for proleptic branching.
+            shadow_a (float): Parameter for determining how buds overshadow other buds. Controls the magnitude of shadows.
+            shadow_b (float): Parameter for determining how buds overshadow other buds. Controls the dropoff of shadows over increasing vertical distance.
+            shadow_voxel_size (float): The resolution of shadow voxels.
+            apical_theta (float): The angle at which new branches will branch off.
+            growth_zeta (float): Parameter for determining which direction buds grow in. Controls how strong the tendency to grow towards light is.
+            tropism (np.array): A three-dimensional tropism vector that represents a preferred direction and magnitude (e.g. downwards, to simulate gravity).
+            cull_threshold (float): The threshold of average light gathered by a branch for that branch to avoid being shed.
+        '''
+        self.vigor = vigor
+        self.priority_min = priority_min
+        self.priority_kappa = priority_kappa
+        self.apical_theta = apical_theta
+        self.main_stem_apical_lambda = main_stem_apical_lambda
+        self.lateral_stem_apical_lambda = lateral_stem_apical_lambda
+        self.growth_zeta = growth_zeta
+        self.tropism = tropism
+        self.shadow_a = shadow_a
+        self.shadow_b = shadow_b
+        self.shadow_voxel_size = shadow_voxel_size
+        self.cull_threshold = cull_threshold
+
+    @classmethod
+    def from_other(cls, original: TreeStructureHyperparameters, \
+                    vigor: float | None = None, \
+                    priority_min: float | None = None, \
+                    priority_kappa: float | None = None, \
+                    apical_theta: float | None = None, \
+                    main_stem_apical_lambda: float | None = None, \
+                    lateral_stem_apical_lambda: float | None = None, \
+                    growth_zeta: float | None = None, \
+                    tropism: np.typing.NDArray[Any] | None = None, \
+                    shadow_a: float | None = None, \
+                    shadow_b: float | None = None, \
+                    shadow_voxel_size: float | None = None, \
+                    cull_threshold: float | None = None) -> TreeStructureHyperparameters:
+        return cls(
+            vigor=vigor if vigor != None else original.vigor,
+            priority_min=priority_min if priority_min != None else original.priority_min,
+            priority_kappa=priority_kappa if priority_kappa != None else original.priority_kappa,
+            apical_theta=apical_theta if apical_theta != None else original.apical_theta,
+            main_stem_apical_lambda=main_stem_apical_lambda if main_stem_apical_lambda != None else original.main_stem_apical_lambda,
+            lateral_stem_apical_lambda=lateral_stem_apical_lambda if lateral_stem_apical_lambda != None else original.lateral_stem_apical_lambda,
+            growth_zeta=growth_zeta if growth_zeta != None else original.growth_zeta,
+            tropism=tropism if tropism != None else original.tropism,
+            shadow_a=shadow_a if shadow_a != None else original.shadow_a,
+            shadow_b=shadow_b if shadow_b != None else original.shadow_b,
+            shadow_voxel_size=shadow_voxel_size if shadow_voxel_size != None else original.shadow_voxel_size,
+            cull_threshold=cull_threshold if cull_threshold != None else original.cull_threshold
+        )
+
+    @staticmethod 
+    def interpolate(lhs: TreeStructureHyperparameters, rhs: TreeStructureHyperparameters, a: float) -> TreeStructureHyperparameters:
+        return TreeStructureHyperparameters(
+            vigor=lhs.vigor + (a * (rhs.vigor - lhs.vigor)),
+            priority_min=lhs.priority_min + (a * (rhs.priority_min - lhs.priority_min)),
+            priority_kappa=lhs.priority_kappa + (a * (rhs.priority_kappa - lhs.priority_kappa)),
+            apical_theta=lhs.apical_theta + (a * (rhs.apical_theta - lhs.apical_theta)),
+            main_stem_apical_lambda=lhs.main_stem_apical_lambda + (a * (rhs.main_stem_apical_lambda - lhs.main_stem_apical_lambda)),
+            lateral_stem_apical_lambda=lhs.lateral_stem_apical_lambda + (a * (rhs.lateral_stem_apical_lambda - lhs.lateral_stem_apical_lambda)),
+            growth_zeta=lhs.growth_zeta + (a * (rhs.growth_zeta - lhs.growth_zeta)),
+            tropism=lhs.tropism + (a * (rhs.tropism - lhs.tropism)),
+            shadow_a=lhs.shadow_a + (a * (rhs.shadow_a - lhs.shadow_a)),
+            shadow_b=lhs.shadow_b + (a * (rhs.shadow_b - lhs.shadow_b)),
+            shadow_voxel_size=lhs.shadow_voxel_size + (a * (rhs.shadow_voxel_size - lhs.shadow_voxel_size)),
+            cull_threshold=lhs.cull_threshold + (a * (rhs.cull_threshold - lhs.cull_threshold))
+        )
+
+    def get_apical_lambda(self, node: TreeNode) -> float:
+        '''
+        Gets the apical lambda for a node.
+
+        Args:
+            node (TreeNode): The node to get the apical lambda for.
+        '''
+        return self.main_stem_apical_lambda if node.main_stem else self.lateral_stem_apical_lambda
 
 
 class TreeNodeShadowVoxel:
@@ -275,10 +431,10 @@ class TreeNodeShadowVoxels:
     The voxels of shadows.    
     '''
 
-    def __init__(self, shadow_a: float, shadow_b: float, shadow_voxel_size: float = 1.0):
-        self.shadow_a = shadow_a
-        self.shadow_b = shadow_b
-        self.shadow_voxel_size = shadow_voxel_size
+    def __init__(self, hyperparameters: TreeStructureHyperparameters):
+        self.shadow_a = hyperparameters.shadow_a
+        self.shadow_b = hyperparameters.shadow_b
+        self.shadow_voxel_size = hyperparameters.shadow_voxel_size
         self.voxels = {}
 
     def add(self, bud: TreeNode):
@@ -329,6 +485,8 @@ class TreeNodeShadowVoxels:
                     for dz in [1, 0, -1]:
                         if dx == 0 and dy == 0 and dz == 0:
                             continue
+                        if z + dz < 0:
+                            continue
                         key_adj: tuple[int, int, int] = (x + dx, y + dy, z + dz)
                         if key_adj not in self.voxels:
                             # Construct voxel and calculate shadow
@@ -367,51 +525,17 @@ class TreeNodeShadowVoxels:
 
             
 
+
+
 class TreeStructure:
     prolepsis: int 
     '''
     The resting period after a new bud is formed before it itself can form a new bud.
     '''
 
-    shadow_a: float 
+    hyperparameters: TreeStructureHyperparameters
     '''
-    The shadow parameter a.
-    '''
-
-    shadow_b: float 
-    '''
-    The shadow parameter b.
-    '''
-
-    shadow_voxel_size: float 
-    '''
-    The size of shadow voxels.
-    '''
-
-    priority_min: float 
-    priority_kappa: float
-
-    apical_theta: float 
-    '''
-    The angle at which new branches are branched off.
-    In nature, this angle is usually one of the following: [1/3, 2/5, 3/8, 5/13]
-    '''
-
-    apical_lambda_fn: Callable[[TreeNode], float] 
-
-    growth_zeta: float 
-    '''
-    The growth direction parameter zeta.
-    '''
-
-    growth_eta: float 
-    '''
-    The growth direction parameter eta.
-    '''
-
-    tropism: np.typing.NDArray[Any] 
-    '''
-    The tropism vector.
+    The hyperparameters of structure growth.
     '''
 
 
@@ -427,54 +551,27 @@ class TreeStructure:
 
     def __init__(self, \
                     prolepsis: int, \
-                    priority_min: float, \
-                    priority_kappa: float, \
-                    apical_theta: float, \
-                    apical_lambda_fn: Callable[[TreeNode], float], \
-                    growth_zeta: float, \
-                    growth_eta: float, \
-                    initial_tropism: np.typing.NDArray[Any] = np.array([0.0, 0.0, -1.0]), \
-                    shadow_a: float = 1.0, \
-                    shadow_b: float = 1.001, \
-                    shadow_voxel_size: float = 2.0, \
-                    cull_threshold: float = 0.15):
+                    hyperparameters: TreeStructureHyperparameters):
         '''
         Initializes a tree.
 
         Args:
             prolepsis (int): The number of cycles that a new bud rests for before it can start producing new buds. Set to 0 for sylleptic branching, or set to >0 for proleptic branching.
-            shadow_a (float): Parameter for determining how buds overshadow other buds. Controls the magnitude of shadows.
-            shadow_b (float): Parameter for determining how buds overshadow other buds. Controls the dropoff of shadows over increasing vertical distance.
-            shadow_voxel_size (float): The resolution of shadow voxels.
-            apical_theta (float): The angle at which new branches will branch off.
-            growth_zeta (float): Parameter for determining which direction buds grow in. Controls how strong the tendency to grow towards light is.
-            growth_eta (float): Parameter for determining which direction buds grow in. Controls how strong the tendency towards the tropism vector is.
-            initial_tropism (np.array): A three-dimensional tropism vector that represents a preferred direction (e.g. downwards, to simulate gravity).
-            cull_threshold (float): The threshold of average light gathered by a branch for that 
+            hyperparameters (TreeStructureHyperparameters): The hyperparameters of growth.
         '''
         self.prolepsis = prolepsis
-        self.shadow_a = shadow_a
-        self.shadow_b = shadow_b
-        self.shadow_voxel_size = shadow_voxel_size
-        self.priority_min = priority_min
-        self.priority_kappa = priority_kappa
-        self.apical_theta = apical_theta
-        self.apical_lambda_fn = apical_lambda_fn
-        self.growth_zeta = growth_zeta
-        self.growth_eta = growth_eta
-        self.tropism = initial_tropism
-        self.cull_threshold = cull_threshold
+        self.hyperparameters = hyperparameters
 
         # Create the root node
         self.root = TreeBranch(None, np.array([0.0, 0.0, 1.0]), main_stem=True)
         first_bud: TreeBud = TreeBud(self.root, self.root.local_vector, 0, main_stem=True)
-        self.root.apical_lambda = self.apical_lambda_fn(self.root)
+        self.root.apical_lambda = self.hyperparameters.get_apical_lambda(self.root)
         self.root.light = 1.0
         self.root.children = [first_bud]
         self.root.children_weights = [1.0]
         self.buds = [first_bud]
     
-    def grow(self, vigor: float):
+    def grow(self):
         '''
         Performs the next step of growth.
 
@@ -484,19 +581,20 @@ class TreeStructure:
 
         # Update light received by buds
         self.root.reset_light()
-        voxels: TreeNodeShadowVoxels = TreeNodeShadowVoxels(self.shadow_a, self.shadow_b, self.shadow_voxel_size)
+        voxels: TreeNodeShadowVoxels = TreeNodeShadowVoxels(self.hyperparameters)
         for k in range(len(self.buds)):
-            bud: TreeNode = self.buds[k]
+            bud: TreeBud = self.buds[k]
             voxels.add(bud)
         voxels.update_light() # Updates the light received by each bud
-        self.root.propagate_light(self.priority_min, 1.0, self.priority_kappa) # Updates the light received by parent nodes, grandparent nodes, etc.
+        self.root.propagate_light(self.hyperparameters.priority_min, 1.0, self.hyperparameters.priority_kappa) # Updates the light received by parent nodes, grandparent nodes, etc.
 
         # Update vigor of each bud
-        self.root.distribute_vigor(vigor)
+        self.root.distribute_vigor(self.hyperparameters.vigor * self.root.light)
 
         # Sprout new branches from buds
+        growth_eta: float = np.linalg.norm(self.hyperparameters.tropism)
         for k in range(len(self.buds)):
-            bud: TreeNode = self.buds[k]
+            bud: TreeBud = self.buds[k]
             if bud.remaining_resting_period == 0 and bud.vigor >= 1.0: # Sprout if bud is not resting and has enough resources to grow
 
                 # Determine how many buds to sprout from the end of the new branch
@@ -504,6 +602,7 @@ class TreeStructure:
                 branch_length: float = bud.vigor / num_sprouted_buds
 
                 # Determine the directions of each bud
+                bud_global_pos: np.typing.NDArray[Any] = bud.get_global_vector()
                 straight_direction: np.typing.NDArray[Any] = normalized(bud.local_vector)
                 straight_normal_direction1: np.typing.NDArray[Any] = normalized(np.array([0.0, -straight_direction[2], straight_direction[1]]))
                 straight_normal_direction2: np.typing.NDArray[Any] = np.cross(straight_direction, straight_normal_direction1)
@@ -512,7 +611,7 @@ class TreeStructure:
 
                 # Create the new branch
                 branch: TreeBranch = TreeBranch(bud.parent, straight_direction * branch_length, bud.main_stem)
-                branch.apical_lambda = self.apical_lambda_fn(branch)
+                branch.apical_lambda = self.hyperparameters.get_apical_lambda(branch)
 
                 # Create the buds sprouting from the end of the new branch
                 for n in range(num_sprouted_buds):
@@ -521,18 +620,19 @@ class TreeStructure:
                         expected_direction = straight_direction
                     else:
                         twist += random.random() * math.tau / (num_sprouted_buds - 1)
-                        expected_direction = (math.cos(self.apical_theta) * straight_direction) + (math.sin(self.apical_theta) * ((math.cos(twist) * straight_normal_direction1) + (math.sin(twist) * straight_normal_direction2)))
+                        expected_direction = (math.cos(self.hyperparameters.apical_theta) * straight_direction) + (math.sin(self.hyperparameters.apical_theta) * ((math.cos(twist) * straight_normal_direction1) + (math.sin(twist) * straight_normal_direction2)))
                     new_bud: TreeBud = TreeBud( \
                         parent=branch, \
                         local_vector=\
-                            (expected_direction * (1.0 - self.growth_zeta - self.growth_eta)) + \
-                            (optimal_growth_direction * self.growth_zeta) + \
-                            (self.tropism * self.growth_eta) \
+                            (expected_direction * (1.0 - self.hyperparameters.growth_zeta - growth_eta)) + \
+                            (optimal_growth_direction * self.hyperparameters.growth_zeta) + \
+                            self.hyperparameters.tropism \
                         , \
                         prolepsis=0 if n == 0 else self.prolepsis, \
                         main_stem=(bud.main_stem and n == 0)
                     )
-                    new_bud.apical_lambda = self.apical_lambda_fn(new_bud)
+                    if bud_global_pos[2] + new_bud.local_vector[2] < 0:
+                        new_bud.local_vector = new_bud.local_vector * bud_global_pos[2] / abs(new_bud.local_vector[2])
                     branch.children.append(new_bud)
                     branch.children_weights.append(1.0)
 
@@ -543,4 +643,4 @@ class TreeStructure:
                 bud.remaining_resting_period -= 1
         
         # Cull branches
-        self.buds = self.root.cull(self.cull_threshold)
+        self.buds = self.root.cull(self.hyperparameters.cull_threshold)

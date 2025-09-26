@@ -2,10 +2,46 @@ import random
 import math
 import datetime
 import os
-from structure import TreeNode, TreeStructure
-from graphics import TreeSkeletonRenderer
+import numpy as np
+from structure import TreeNode, TreeStructureHyperparameters, TreeStructure
+from graphics import TreeSkeletonRenderer, TreeRenderer
 
 skeleton_render: TreeSkeletonRenderer = TreeSkeletonRenderer(zoom=10.0)
+
+class Keyframe:
+    cycles_min: int 
+    '''
+    The minimum number of growth cycles to perform.
+    '''
+
+    cycles_max: int 
+    '''
+    The maximum number of growth cycles to perform.
+    '''
+
+    hyperparameters: TreeStructureHyperparameters
+    '''
+    The growth hyperparameters at the keyframe.
+    '''
+
+    def __init__(self, cycles_min: int, cycles_max: int, hyperparameters: TreeStructureHyperparameters):
+        '''
+        
+
+        Args:
+            cycles_min (int): The minimum number of growth cycles to perform.
+            cycles_max (int): The maximum number of growth cycles to perform.
+            hyperparameters (TreeStructureHyperparameters): The growth hyperparameters at the keyframe.
+        '''
+        self.cycles_min = cycles_min
+        self.cycles_max = cycles_max
+        self.hyperparameters = hyperparameters
+
+    def get_num_cycles(self) -> int:
+        '''
+        Generates a random number of cycles.
+        '''
+        return random.randrange(self.cycles_min, self.cycles_max + 1)
 
 class Genus:
     name: str 
@@ -18,130 +54,136 @@ class Genus:
     The resting period of a bud before it can sprout a new bud.
     '''
 
-    cycles_min: int 
+    keyframes: list[Keyframe]
     '''
-    The minimum number of growth cycles to perform.
-    '''
-
-    cycles_max: int 
-    '''
-    The maximum number of growth cycles to perform.
+    The keyframe phases of growth.
     '''
 
-    vigor: float 
+    full_renderer: TreeRenderer 
     '''
-    Parameter that controls how many branches are sprouted.
+    Renders a complete tree.
     '''
-
-    priority_min: float 
-    '''
-    The weight of low-priority branches in terms of receiving growth resources.
-    '''
-
-    priority_kappa: float
-    '''
-    Parameter in the range (0, 1]. Lower values increase the strictness of which branches are considered high-priority.
-    '''
-
-    apical_theta: float 
-    '''
-    The angle at which new branches are branched off.
-    In nature, this angle is usually one of the following: [PI*1/3, PI*2/5, PI*3/8, PI*5/13]
-    '''
-
-    growth_zeta: float 
-    '''
-    The growth direction parameter zeta.
-    '''
-
-    growth_eta: float 
-    '''
-    The growth direction parameter eta.
-    '''
-
-    main_stem_apical_lambda_initial: float 
-    main_stem_apical_lambda_decay: float 
-    lateral_stem_apical_lambda_initial: float 
-    lateral_stem_apical_lambda_decay: float 
 
     def __init__(self, \
                     name: str, \
-                    prolepsis: int = 4, \
-                    cycles_min: int = 10, \
-                    cycles_max: int = 15, \
-                    vigor: float = 1.0, \
-                    priority_min: float = 0.9, \
-                    priority_kappa: float = 0.75, \
-                    apical_theta: float = math.pi * 2 / 5, \
-                    main_stem_apical_lambda_initial: float = 0.9, \
-                    lateral_stem_apical_lambda_initial: float = 0.75, \
-                    main_stem_apical_lambda_decay: float = 0.9, \
-                    lateral_stem_apical_lambda_decay: float = 0.9, \
-                    growth_zeta: float = 0.2, \
-                    growth_eta: float = 0.1):
+                    prolepsis: int, \
+                    keyframes: list[Keyframe]):
         '''
         
         '''
         self.name = name
         self.prolepsis = prolepsis
-        self.cycles_min = cycles_min
-        self.cycles_max = cycles_max
-        self.vigor = vigor
-        self.priority_min = priority_min
-        self.priority_kappa = priority_kappa
-        self.apical_theta = apical_theta
-        self.main_stem_apical_lambda_initial = main_stem_apical_lambda_initial
-        self.lateral_stem_apical_lambda_initial = lateral_stem_apical_lambda_initial
-        self.main_stem_apical_lambda_decay = main_stem_apical_lambda_decay
-        self.lateral_stem_apical_lambda_decay = lateral_stem_apical_lambda_decay
-        self.growth_zeta = growth_zeta
-        self.growth_eta = growth_eta
+        self.keyframes = keyframes
+
+        # Create the renderer
+        self.full_renderer = TreeRenderer(zoom=1.0)
 
 
-    def generate_tree_structure(self, render_skeleton: bool = False) -> TreeStructure:
+    def generate_tree_structure(self, render_skeleton: bool = False, render_full: bool = False) -> TreeStructure:
         directory: str = f"file/{self.name}/{datetime.datetime.now().timestamp()}"
         os.makedirs(directory, exist_ok=True)
 
-        iteration: int = 1
-        num_iterations: int = (self.prolepsis + 1) * random.randrange(self.cycles_min, self.cycles_max)
-        main_stem_apical_lambda: float = self.main_stem_apical_lambda_initial
-        lateral_stem_apical_lambda: float = self.lateral_stem_apical_lambda_initial
-        def apical_lambda_fn(node: TreeNode) -> float:
-            if node.main_stem:
-                return main_stem_apical_lambda
-            else:
-                return lateral_stem_apical_lambda
+        intermediary_directory: str = directory + "/intermediary"
+        if render_skeleton or render_full:
+            os.makedirs(intermediary_directory, exist_ok=True)
 
         structure: TreeStructure = TreeStructure( \
             prolepsis=self.prolepsis, \
-            priority_min=self.priority_min, \
-            priority_kappa=self.priority_kappa, \
-            apical_theta=self.apical_theta, \
-            apical_lambda_fn=apical_lambda_fn, \
-            growth_zeta=self.growth_zeta, \
-            growth_eta=self.growth_eta \
+            hyperparameters=self.keyframes[0].hyperparameters \
         )
+
+        # Record the total number of iterations
+        total_iterations: int = 1
+
+        # Perform growth, interpolating hyperparameters between successive keyframes        
+        iteration: int
+        num_iterations: int
+        for k in range(len(self.keyframes) - 1):
+            keyframe: Keyframe = self.keyframes[k]
+            next_keyframe: Keyframe = self.keyframes[k + 1]
+            iteration = 1
+            num_iterations = (self.prolepsis + 1) * keyframe.get_num_cycles()
+            while iteration <= num_iterations:
+                structure.grow()
+                structure.hyperparameters = TreeStructureHyperparameters.interpolate(keyframe.hyperparameters, next_keyframe.hyperparameters, iteration / num_iterations)
+                iteration += 1
+                total_iterations += 1
+
+                if self.prolepsis == 0 or (self.prolepsis > 0 and iteration % self.prolepsis == 0):
+                    # Record progress
+                    print(f"Iteration {total_iterations} ({int(100*iteration/num_iterations):03d}% of current keyframe): {structure.root.get_descendant_nodes()} nodes")
+
+                    if render_skeleton:
+                        skeleton_render.render(structure, f"{intermediary_directory}/skeleton_{iteration:03d}.png")
+
+                    if render_full:
+                        self.full_renderer.render(structure, f"{intermediary_directory}/full_{iteration:03d}.png")
+
+        # Perform growth for the last keyframe, not interpolating with anything else
+        iteration = 1
+        num_iterations = (self.prolepsis + 1) * self.keyframes[-1].get_num_cycles()
+        structure.hyperparameters = self.keyframes[-1].hyperparameters
         while iteration <= num_iterations:
-            structure.grow(self.vigor * pow(iteration / (self.prolepsis + 1), 1.5))
-            print(f"Iteration {iteration}: {structure.root.get_descendant_nodes()} nodes")
-
-            if render_skeleton:
-                skeleton_render.render(structure, f"{directory}/{iteration:03d}.png")
-
+            structure.grow()
             iteration += 1
-            main_stem_apical_lambda = 0.5 + ((main_stem_apical_lambda - 0.5) * pow(self.main_stem_apical_lambda_decay, 1.0 / num_iterations))
-            lateral_stem_apical_lambda = 0.5 + ((lateral_stem_apical_lambda - 0.5) * pow(self.lateral_stem_apical_lambda_decay, 1.0 / num_iterations))
+            total_iterations += 1
+
+            if (self.prolepsis == 0 or (self.prolepsis > 0 and iteration % self.prolepsis == 0)) and iteration <= num_iterations:
+                # Record progress
+                print(f"Iteration {total_iterations} ({int(100*iteration/num_iterations):03d}% of current keyframe): {structure.root.get_descendant_nodes()} nodes")
+
+                if render_skeleton:
+                    skeleton_render.render(structure, f"{intermediary_directory}/skeleton_{iteration:03d}.png")
+
+                if render_full:
+                    self.full_renderer.render(structure, f"{intermediary_directory}/full_{iteration:03d}.png")
+
+        # Do final render
+        self.full_renderer.render(structure, f"{directory}/render.png")
+
         return structure
-    
+
+
+###########################
+# Test
+###########################
+
+test_keyframe_01: Keyframe = Keyframe(
+    cycles_min=10,
+    cycles_max=10,
+    hyperparameters=TreeStructureHyperparameters(
+        vigor=2.5, \
+        main_stem_apical_lambda=0.9, \
+        lateral_stem_apical_lambda=0.55, \
+        growth_zeta=0.025, \
+        tropism=np.array((0.0, 0.0, 0.025)), \
+        shadow_a=1.0, \
+        shadow_b=1.45, \
+        shadow_voxel_size=1.0, \
+        cull_threshold=0.01, \
+    )
+)
+test_keyframe_02: Keyframe = Keyframe(
+    cycles_min=10,
+    cycles_max=10,
+    hyperparameters=TreeStructureHyperparameters.alter()
+)
+
 TEST_GENUS_01: Genus = Genus( \
     name = 'test01', \
-    prolepsis=0, \
-    cycles_min=10, \
-    cycles_max=15, \
-    vigor=5.0, \
+    prolepsis=4, \
+    cycles_min=20, \
+    cycles_max=20, \
+    vigor=2.5, \
     main_stem_apical_lambda_initial=0.9, \
     main_stem_apical_lambda_decay=0.25, \
-    lateral_stem_apical_lambda_initial=0.6, \
-    lateral_stem_apical_lambda_decay=0.999, \
-    growth_eta=0.15, \
+    lateral_stem_apical_lambda_final=0.55, \
+    lateral_stem_apical_lambda_undecay=0.999, \
+    growth_zeta=0.025, \
+    upwards_growth_eta=0.025, \
+    downwards_growth_eta=0.005, \
+    shadow_a=1.0, \
+    shadow_b=1.45, \
+    shadow_voxel_size=1.0, \
+    cull_threshold=0.01, \
 )

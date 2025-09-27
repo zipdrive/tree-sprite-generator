@@ -111,13 +111,13 @@ class Genus:
 
                 if self.prolepsis == 0 or (self.prolepsis > 0 and iteration % self.prolepsis == 0):
                     # Record progress
-                    print(f"Iteration {total_iterations} ({int(100*iteration/num_iterations):03d}% of current keyframe): {structure.root.get_descendant_nodes()} nodes")
+                    print(f"Iteration {total_iterations:04d} ({int(100*iteration/num_iterations):03d}% of keyframe {k + 1}): {structure.root.get_descendant_nodes()} nodes")
 
                     if render_skeleton:
-                        skeleton_render.render(structure, f"{intermediary_directory}/skeleton_{iteration:03d}.png")
+                        skeleton_render.render(structure, f"{intermediary_directory}/skeleton_{total_iterations:04d}.png")
 
                     if render_full:
-                        self.full_renderer.render(structure, f"{intermediary_directory}/full_{iteration:03d}.png")
+                        self.full_renderer.render(structure, f"{intermediary_directory}/full_{total_iterations:04d}.png")
 
         # Perform growth for the last keyframe, not interpolating with anything else
         iteration = 1
@@ -130,13 +130,13 @@ class Genus:
 
             if (self.prolepsis == 0 or (self.prolepsis > 0 and iteration % self.prolepsis == 0)) and iteration <= num_iterations:
                 # Record progress
-                print(f"Iteration {total_iterations} ({int(100*iteration/num_iterations):03d}% of current keyframe): {structure.root.get_descendant_nodes()} nodes")
+                print(f"Iteration {total_iterations:04d} ({int(100*iteration/num_iterations):03d}% of keyframe {len(self.keyframes)}): {structure.root.get_descendant_nodes()} nodes")
 
                 if render_skeleton:
-                    skeleton_render.render(structure, f"{intermediary_directory}/skeleton_{iteration:03d}.png")
+                    skeleton_render.render(structure, f"{intermediary_directory}/skeleton_{total_iterations:04d}.png")
 
                 if render_full:
-                    self.full_renderer.render(structure, f"{intermediary_directory}/full_{iteration:03d}.png")
+                    self.full_renderer.render(structure, f"{intermediary_directory}/full_{total_iterations:04d}.png")
 
         # Do final render
         self.full_renderer.render(structure, f"{directory}/render.png")
@@ -148,42 +148,44 @@ class Genus:
 # Test
 ###########################
 
-test_keyframe_01: Keyframe = Keyframe(
-    cycles_min=10,
-    cycles_max=10,
+TEST_GENUS_01_keyframe_01: Keyframe = Keyframe(
+    cycles_min=40,
+    cycles_max=40,
     hyperparameters=TreeStructureHyperparameters(
-        vigor=2.5, \
-        main_stem_apical_lambda=0.9, \
-        lateral_stem_apical_lambda=0.55, \
-        growth_zeta=0.025, \
-        tropism=np.array((0.0, 0.0, 0.025)), \
-        shadow_a=1.0, \
-        shadow_b=1.45, \
-        shadow_voxel_size=1.0, \
-        cull_threshold=0.01, \
+        vigor=4.0, 
+        priority_min=0.006, 
+        priority_kappa=0.35,
+        main_stem_apical_lambda=0.6, 
+        lateral_stem_apical_lambda=0.5, 
+        growth_zeta=0.025, 
+        tropism=np.array((0.0, 0.0, -0.01)), 
+        shadow_a=1.0, 
+        shadow_b=1.45, 
+        shadow_voxel_size=1.0, 
+        cull_threshold=0.005, 
     )
 )
-test_keyframe_02: Keyframe = Keyframe(
-    cycles_min=10,
+TEST_GENUS_01_keyframe_02: Keyframe = Keyframe(
+    cycles_min=2,
+    cycles_max=4,
+    hyperparameters=TreeStructureHyperparameters.from_other(TEST_GENUS_01_keyframe_01.hyperparameters,
+        vigor=4.0,
+        priority_min=0.75,
+        main_stem_apical_lambda=0.5,
+    )
+)
+TEST_GENUS_01_keyframe_03: Keyframe = Keyframe(
+    cycles_min=6,
     cycles_max=10,
-    hyperparameters=TreeStructureHyperparameters.alter()
+    hyperparameters=TreeStructureHyperparameters.from_other(TEST_GENUS_01_keyframe_02.hyperparameters,
+        vigor=3,
+        priority_min=0.5,
+        main_stem_apical_lambda=0.5,
+    )
 )
 
 TEST_GENUS_01: Genus = Genus( \
-    name = 'test01', \
-    prolepsis=4, \
-    cycles_min=20, \
-    cycles_max=20, \
-    vigor=2.5, \
-    main_stem_apical_lambda_initial=0.9, \
-    main_stem_apical_lambda_decay=0.25, \
-    lateral_stem_apical_lambda_final=0.55, \
-    lateral_stem_apical_lambda_undecay=0.999, \
-    growth_zeta=0.025, \
-    upwards_growth_eta=0.025, \
-    downwards_growth_eta=0.005, \
-    shadow_a=1.0, \
-    shadow_b=1.45, \
-    shadow_voxel_size=1.0, \
-    cull_threshold=0.01, \
+    name = 'test01', 
+    prolepsis=4, 
+    keyframes=[TEST_GENUS_01_keyframe_01]
 )

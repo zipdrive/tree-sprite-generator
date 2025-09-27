@@ -136,7 +136,10 @@ class TreeRenderer(Renderer):
         width: float = 0.0
         if isinstance(node, TreeBranch) and len(node.children) > 0:
             for k in range(len(node.children)):
-                width += pow(self.render_node(img, node_global_position, node.children[k]), self.width_parameter)
+                if isinstance(node.children[k], TreeBranch):
+                    width += pow(self.render_node(img, node_global_position, node.children[k]), self.width_parameter)
+                else:
+                    width += 1.0
         else:
             width = 1.0
 
@@ -165,6 +168,12 @@ class TreeRenderer(Renderer):
                     img[x, y] = (0 if isinstance(node, TreeBud) else luma, luma, 0 if isinstance(node, TreeBud) else  luma, 255)
 
                 angle += math.pi / (width * self.zoom)
+
+        if isinstance(node, TreeBranch):
+            for k in range(len(node.children)):
+                child_node: TreeNode = node.children[k]
+                if isinstance(child_node, TreeBud):
+                    self.render_node(img, node_global_position + (child_node.local_vector * width), child_node)
 
         return width
 

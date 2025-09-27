@@ -65,23 +65,27 @@ class TreeNode:
         '''
         pass
 
-    def propagate_light(self, weight_min: float, weight_max: float, kappa: float):
+    def propagate_light(self):
         '''
         Propagates light received from the buds up to the root, and recalculates the weight of each child.
-
-        Args:
-            weight_min (float): The minimum weight of a child.
-            weight_max (float): The maximum weight of a child.
-            kappa (float): Parameter in the range (0, 1]. Lower values make the branches receiving the most light be more aggressively supported.
         '''
         pass
 
-    def distribute_vigor(self, vigor_received: float):
+    def construct_raw_queue(self) -> list[tuple[TreeNode, float]]:
+        '''
+        Constructs an unsorted priority queue of each child node on the main stem of this node, excluding the children that compose the main stem branch.
+        '''
+        return [(self, self.light)]
+
+    def distribute_vigor(self, vigor_received: float, weight_min: float, weight_max: float = 1.0, weight_kappa: float = 0.5):
         '''
         Distributes vigor to the children of the node.
 
         Args:
             vigor_received (float): The vigor received from the parent.
+            weight_min (float): The minimum weight of a child.
+            weight_max (float): The maximum weight of a child.
+            weight_kappa (float): Parameter in the range (0, 1]. Lower values make the branches receiving the most light be more aggressively supported.
         '''
         self.vigor = vigor_received
 
@@ -175,47 +179,53 @@ class TreeBranch(TreeNode):
         for k in range(len(self.children)):
             self.children[k].reset_light()
             
-    def propagate_light(self, weight_min: float, weight_max: float, kappa: float):
+    def propagate_light(self):
         # Determine the average amount of light being received by the buds from each child
         self.num_descendant_buds = 0
         self.num_descendant_nodes = 0
-        child_avg_light_amts: list[tuple[int, float]] = []
         for k in range(len(self.children)):
             child: TreeNode = self.children[k]
-            child.propagate_light(weight_min, weight_max, kappa)
+            child.propagate_light()
             child_num_buds: int = child.get_descendant_buds() + (1 if isinstance(child, TreeBud) else 0)
             self.num_descendant_buds += child_num_buds
             self.num_descendant_nodes += child.get_descendant_nodes() + 1
             self.light += child.light
-            if child_num_buds == 0:
-                child_avg_light_amts.append((k, 0.0))
-            else:
-                child_avg_light_amts.append((k, (self.apical_lambda if k == 0 else (1.0 - self.apical_lambda)) * child.light / child_num_buds))
 
-        # Sort in order of average light received
-        child_avg_light_amts.sort(key=lambda tup: tup[1])
+    def construct_raw_queue(self) -> list[tuple[TreeNode, float]]:
+        if len(self.children) > 0:
+            main_raw_queue: list[tuple[TreeNode, float]] = self.children[0].construct_raw_queue()
+            for k in range(1, len(self.children)):
+                main_raw_queue.append((self.children[k], self.children[k].light / (1 + self.children[k].get_descendant_nodes())))
+            return main_raw_queue
+        return []
 
-        # Calculate weights as function of rank of average light received
-        for idx in range(len(child_avg_light_amts)):
-            rank_pct = 1.0 if len(child_avg_light_amts) == 1 else (idx / (len(child_avg_light_amts) - 1))
-            x: float = min(1.0, (1.0 - rank_pct) / kappa)
-            k, _ = child_avg_light_amts[idx]
-            weight: float = weight_max + ((weight_min - weight_max) * x)
-            self.children_weights[k] = weight
-
-    def distribute_vigor(self, vigor_received: float):
+    def distribute_vigor(self, vigor_received: float, weight_min: float, weight_max: float = 1.0, weight_kappa: float = 0.5):
         self.vigor = vigor_received
-        child_ratios: list[float] = [self.children[k].light * self.children_weights[k] for k in range(len(self.children))]
-        total_child_ratios: float = sum(child_ratios)
-        for k in range(len(self.children)):
+
+        raw_queue: list[tuple[TreeNode, float]] = self.construct_raw_queue()
+        priority_queue: list[tuple[TreeNode, float]] = [(raw_queue[k][0], (self.apical_lambda if k == 0 else (1.0 - self.apical_lambda)) * raw_queue[k][1]) for k in range(len(raw_queue))]
+        priority_queue.sort(key=lambda tup: -tup[1])
+
+        weights: list[float] = []
+        for k in range(len(priority_queue)):
+            k_pct: float
             try:
-                self.children[k].distribute_vigor(self.vigor * child_ratios[k] / total_child_ratios)
+                k_pct = min(1.0, k / (weight_kappa * (len(priority_queue) - 1)))
             except ZeroDivisionError:
-                self.children[k].distribute_vigor(0.0)
+                k_pct = 0.0
+            weights.append(weight_max + ((weight_min - weight_max) * k_pct))
+        total_weight: float = sum(weights)
+        for k in range(len(priority_queue)):
+            node, _ = priority_queue[k]
+            try:
+                node.distribute_vigor(vigor_received * weights[k] / total_weight, weight_min, weight_max, weight_kappa)
+            except ZeroDivisionError:
+                # I don't think this should ever happen, tbh
+                node.distribute_vigor(vigor_received, weight_min, weight_max, weight_kappa)
 
     def cull(self, culling_ratio: float) -> list[TreeBud]:
         if hasattr(self, 'light') and self.num_descendant_nodes > 0 and self.light / self.num_descendant_nodes < culling_ratio:
-            print(f"  {self.num_descendant_nodes} nodes ({self.num_descendant_buds} buds) culled. Total light collected from buds was {self.light}.")
+            #print(f"  {self.num_descendant_nodes} nodes ({self.num_descendant_buds} buds) culled. Total light collected from buds was {self.light}.")
             self.children = []
             return []
         else:
@@ -348,7 +358,7 @@ class TreeStructureHyperparameters:
             main_stem_apical_lambda=main_stem_apical_lambda if main_stem_apical_lambda != None else original.main_stem_apical_lambda,
             lateral_stem_apical_lambda=lateral_stem_apical_lambda if lateral_stem_apical_lambda != None else original.lateral_stem_apical_lambda,
             growth_zeta=growth_zeta if growth_zeta != None else original.growth_zeta,
-            tropism=tropism if tropism != None else original.tropism,
+            tropism=tropism if type(tropism) == np.ndarray else original.tropism,
             shadow_a=shadow_a if shadow_a != None else original.shadow_a,
             shadow_b=shadow_b if shadow_b != None else original.shadow_b,
             shadow_voxel_size=shadow_voxel_size if shadow_voxel_size != None else original.shadow_voxel_size,
@@ -586,10 +596,10 @@ class TreeStructure:
             bud: TreeBud = self.buds[k]
             voxels.add(bud)
         voxels.update_light() # Updates the light received by each bud
-        self.root.propagate_light(self.hyperparameters.priority_min, 1.0, self.hyperparameters.priority_kappa) # Updates the light received by parent nodes, grandparent nodes, etc.
+        self.root.propagate_light() # Updates the light received by parent nodes, grandparent nodes, etc.
 
         # Update vigor of each bud
-        self.root.distribute_vigor(self.hyperparameters.vigor * self.root.light)
+        self.root.distribute_vigor(self.hyperparameters.vigor * self.root.light, self.hyperparameters.priority_min, 1.0, self.hyperparameters.priority_kappa)
 
         # Sprout new branches from buds
         growth_eta: float = np.linalg.norm(self.hyperparameters.tropism)

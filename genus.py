@@ -152,13 +152,13 @@ TEST_GENUS_01_keyframe_01: Keyframe = Keyframe(
     cycles_min=40,
     cycles_max=40,
     hyperparameters=TreeStructureHyperparameters(
-        vigor=4.0, 
+        vigor=1.0, 
         priority_min=0.006, 
         priority_kappa=0.35,
-        main_stem_apical_lambda=0.6, 
+        main_stem_apical_lambda=0.9, 
         lateral_stem_apical_lambda=0.5, 
         growth_zeta=0.025, 
-        tropism=np.array((0.0, 0.0, -0.01)), 
+        tropism=np.array((0.0, 0.0, 0.01)), 
         shadow_a=1.0, 
         shadow_b=1.45, 
         shadow_voxel_size=1.0, 
@@ -186,6 +186,6 @@ TEST_GENUS_01_keyframe_03: Keyframe = Keyframe(
 
 TEST_GENUS_01: Genus = Genus( \
     name = 'test01', 
-    prolepsis=4, 
+    prolepsis=12, 
     keyframes=[TEST_GENUS_01_keyframe_01]
 )

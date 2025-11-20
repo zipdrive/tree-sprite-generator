@@ -59,14 +59,72 @@ TEST_GENUS_01: Genus = Genus(
     name='test01', 
     branches=[
         TreeBranchHyperparameters(
-            length=20,
-            radius=2.0,
-            gnarliness=0.1,
-            num_children=6
+            length=43.47,
+            radius=20.0,
+            gnarliness=0.03,
+            num_segments=12,
+            num_children=7,
+            child_branching_angle=48*math.pi/180,
+            child_min_branching_point=0.23
         ),
         TreeBranchHyperparameters(
-            length=20,
-            
+            length=27.14,
+            radius=0.63,
+            gnarliness=0.25,
+            num_segments=8,
+            num_children=4,
+            child_branching_angle=75*math.pi/180,
+            child_min_branching_point=0.33
+        ),
+        TreeBranchHyperparameters(
+            length=9.51,
+            radius=0.76,
+            gnarliness=0.20,
+            num_segments=6,
+            num_children=3,
+            child_branching_angle=60*math.pi/180,
+            child_min_branching_point=0.0
+        ),
+        TreeBranchHyperparameters(
+            length=4.6,
+            radius=0.70,
+            gnarliness=0.09,
+            num_segments=4
         )
     ]
 )
+'''
+TreeBranchHyperparameters(
+    length=43.47,
+    radius=8.0,
+    gnarliness=0.03,
+    num_segments=12,
+    num_children=7,
+    child_branching_angle=48*math.pi/180,
+    child_min_branching_point=0.23
+),
+TreeBranchHyperparameters(
+    length=27.14,
+    radius=0.63,
+    gnarliness=0.25,
+    num_segments=8,
+    num_children=4,
+    child_branching_angle=75*math.pi/180,
+    child_min_branching_point=0.33
+),
+TreeBranchHyperparameters(
+    length=9.51,
+    radius=0.76,
+    gnarliness=0.20,
+    num_segments=6,
+    num_children=3,
+    child_branching_angle=60*math.pi/180,
+    child_min_branching_point=0.0
+),
+TreeBranchHyperparameters(
+    length=4.6,
+    radius=0.70,
+    gnarliness=0.09,
+    num_segments=4
+)
+'''

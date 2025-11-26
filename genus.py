@@ -67,7 +67,7 @@ TEST_GENUS_01: Genus = Genus(
     branches=[
         TreeBranchHyperparameters(
             length=600.47,
-            radius=20.0,
+            radius=40.0,
             gnarliness=0.03,
             num_segments=12,
             num_children=15,
@@ -76,7 +76,7 @@ TEST_GENUS_01: Genus = Genus(
         ),
         TreeBranchHyperparameters(
             length=300.14,
-            radius=0.63,
+            radius=0.33,
             gnarliness=0.25,
             num_segments=8,
             num_children=6,

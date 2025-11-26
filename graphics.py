@@ -102,48 +102,81 @@ class TreeRenderer:
         pass
 
 
-    def geometrize_branch_segment(self, segment: TreeBranchSegment, end_cap: bool = False) -> list[Vertex]:
+    def geometrize_branch_segment(self, segment: TreeBranchSegment, next_segment: TreeBranchSegment | None) -> list[Vertex]:
         '''
         Constructs vertices for the geometry of the branch segment.
         '''
-        dir: Vector = segment.vec.normalize()
-        orth1: Vector = dir.cross(Vector.construct(depth=1.0))
-        orth2: Vector = dir.cross(orth1) # orth2 is orth1 rotated 90 degrees counterclockwise around dir
-        radial_segments: int = 32
+        dir0: Vector = segment.vec.normalize()
+        orth00: Vector = dir0.cross(Vector.construct(depth=1.0))
+        orth01: Vector = dir0.cross(orth00) # orth01 is orth00 rotated 90 degrees counterclockwise around dir
+        radial_segments: int = 8
         angle: float = 0.0
         vertices: list[Vertex] = []
 
         # Create geometry of cylinder walls in radial segments
-        while angle < math.tau and not np.isclose(angle, math.tau):
-            # Determine the vertices of the two triangles composing this radial segment
-            next_angle: float = angle + (math.tau / radial_segments)
-            normal00: Vector = (math.cos(angle) * orth1) + (math.sin(angle) * orth2)
-            normal01: Vector = (math.cos(next_angle) * orth1) + (math.sin(next_angle) * orth2)
-            corner00: Vector = segment.start + (normal00 * segment.radius_base)
-            corner01: Vector = segment.start + (normal01 * segment.radius_base)
-            corner10: Vector = segment.start + segment.vec + (normal00 * segment.radius_end)
-            corner11: Vector = segment.start + segment.vec + (normal01 * segment.radius_end)
-            end_center: Vector = segment.start + segment.vec
-            
-            # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
-            vertices += [
-                Vertex(corner00, normal00),
-                Vertex(corner01, normal01),
-                Vertex(corner10, normal00),
-                Vertex(corner11, normal01),
-                Vertex(corner10, normal00),
-                Vertex(corner01, normal01)
-            ]
+        if next_segment == None or segment.is_end_cap:
+            # Don't consider segment after it, just make a straight cylinder
+            while angle < math.tau and not np.isclose(angle, math.tau):
+                # Determine the vertices of the two triangles composing this radial segment
+                next_angle: float = angle + (math.tau / radial_segments)
+                normal00: Vector = (math.cos(angle) * orth00) + (math.sin(angle) * orth01)
+                normal01: Vector = (math.cos(next_angle) * orth00) + (math.sin(next_angle) * orth01)
+                corner00: Vector = segment.start + (normal00 * segment.radius_base)
+                corner01: Vector = segment.start + (normal01 * segment.radius_base)
+                corner10: Vector = segment.start + segment.vec + (normal00 * segment.radius_end)
+                corner11: Vector = segment.start + segment.vec + (normal01 * segment.radius_end)
+                end_center: Vector = segment.start + segment.vec
+                
+                # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
+                vertices += [
+                    Vertex(corner01, normal01),
+                    Vertex(corner00, normal00),
+                    Vertex(corner10, normal00)
+                ]
+                vertices += [
+                    Vertex(corner10, normal00),
+                    Vertex(corner11, normal01),
+                    Vertex(corner01, normal01)
+                ]
 
-            # Compose end cap triangle from [corner10, corner11, end_center]
-            vertices += [
-                Vertex(corner10, dir),
-                Vertex(corner11, dir),
-                Vertex(end_center, dir)
-            ]
+                # Compose end cap triangle from [corner10, corner11, end_center]
+                vertices += [
+                    Vertex(corner11, dir0),
+                    Vertex(corner10, dir0),
+                    Vertex(end_center, dir0)
+                ]
 
-            # Advance iteration
-            angle = next_angle
+                # Advance iteration
+                angle = next_angle
+        else:
+            dir1: Vector = next_segment.vec.normalize()
+            orth10: Vector = dir1.cross(Vector.construct(depth=1.0))
+            orth11: Vector = dir1.cross(orth10)
+
+            while angle < math.tau and not np.isclose(angle, math.tau):
+                # Determine the vertices of the two triangles composing this radial segment
+                next_angle: float = angle + (math.tau / radial_segments)
+                normal00: Vector = (math.cos(angle) * orth00) + (math.sin(angle) * orth01)
+                normal01: Vector = (math.cos(next_angle) * orth00) + (math.sin(next_angle) * orth01)
+                normal10: Vector = (math.cos(angle) * orth10) + (math.sin(angle) * orth11)
+                normal11: Vector = (math.cos(next_angle) * orth10) + (math.sin(next_angle) * orth11)
+                corner00: Vector = segment.start + (normal00 * segment.radius_base)
+                corner01: Vector = segment.start + (normal01 * segment.radius_base)
+                corner10: Vector = segment.start + segment.vec + (normal10 * segment.radius_end)
+                corner11: Vector = segment.start + segment.vec + (normal11 * segment.radius_end)
+                
+                # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
+                vertices += [
+                    Vertex(corner01, normal01),
+                    Vertex(corner00, normal00),
+                    Vertex(corner10, normal10),
+                    Vertex(corner10, normal10),
+                    Vertex(corner11, normal11),
+                    Vertex(corner01, normal01)
+                ]
+
+                # Advance iteration
+                angle = next_angle
 
         return vertices
 
@@ -175,7 +208,7 @@ class TreeRenderer:
         # Construct the vertices
         vertices: list[Vertex] = []
         for k in range(len(structure.branch_segments)):
-            vertices += self.geometrize_branch_segment(structure.branch_segments[k])
+            vertices += self.geometrize_branch_segment(structure.branch_segments[k], structure.branch_segments[k + 1] if k < len(structure.branch_segments) - 1 else None)
         vertex_data = np.dstack(
             [
                 [vertices[k].pos.horizontal for k in range(len(vertices))],
@@ -274,7 +307,7 @@ in vec3 v_normal;
 out vec4 f_color;
 
 void main() {
-    f_color = vec4(v_normal, 1.0);
+    f_color = vec4(0.5 * (vec3(1.0, 1.0, 1.0) + v_normal), 1.0);
 }
 '''
         )

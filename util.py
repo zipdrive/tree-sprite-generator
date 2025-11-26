@@ -75,20 +75,36 @@ class Vector:
     def __add__(self, other: Self) -> Self:
         return Vector(self.vector + other.vector)
     
+    def __iadd__(self, other: Self) -> Self:
+        self.vector += other.vector
+        return self
+    
     def __sub__(self, other: Self) -> Self:
         return Vector(self.vector - other.vector)
+    
+    def __isub__(self, other: Self) -> Self:
+        self.vector -= other.vector
+        return self
     
     def __mul__(self, scalar: float) -> Self:
         return Vector(self.vector * scalar)
     
     def __rmul__(self, scalar: float) -> Self:
-        return Vector(self.vector * scalar)
+        return self.__mul__(scalar)
+    
+    def __imul__(self, scalar: float) -> Self:
+        self.vector *= scalar
+        return self 
     
     def __truediv__(self, scalar: float) -> Self:
         return Vector(self.vector / scalar)
     
     def __rtruediv__(self, scalar: float) -> Self:
-        return Vector(self.vector / scalar)
+        return self.__truediv__(scalar)
+    
+    def __itruediv__(self, scalar: float) -> Self:
+        self.vector /= scalar
+        return self 
     
     def __neg__(self) -> Self:
         return Vector(-self.vector)

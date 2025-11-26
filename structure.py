@@ -105,15 +105,26 @@ class TreeBranchSegment:
     The direction and magnitude of the branch.
     '''
 
-    radius: float 
+    radius_base: float 
     '''
-    The radius of the branch.
+    The radius of the base end.
+    '''
+
+    radius_end: float 
+    '''
+    The radius of the terminal end.
+    '''
+
+    is_end_cap: bool = False 
+    '''
+    True if the segment is on the end of the branch.
     '''
 
     def __init__(self, start: Vector, vec: Vector, radius: float):
         self.start = start
         self.vec = vec 
-        self.radius = radius
+        self.radius_base = radius
+        self.radius_end = radius
 
 class TreeStructure:
     branch_segments: list[TreeBranchSegment]
@@ -165,12 +176,12 @@ class TreeStructure:
                 q: int = int(math.floor(ratio))
                 r: float = ratio - q 
                 next_segment_start = parent.segments[q].start + (r * parent.segments[q].vec)
-                base_radius *= parent.segments[q].radius
+                base_radius *= parent.segments[q].radius_base
 
                 # Calculate a branching orientation
                 parent_orientation: Vector = parent.segments[q].vec.normalize()
                 norm1: np.typing.NDArray[np.floating[Any]] = parent_orientation.cross(Vector.construct(horizontal=1.0))
-                next_segment_orientation = parent.segments[q].vec.rotate(
+                next_segment_orientation = parent_orientation.rotate(
                         angle=parent_hyperparameters.child_angle, 
                         axis=norm1
                     ).rotate(
@@ -197,6 +208,7 @@ class TreeStructure:
 
                 # Taper the radius of the next segment
                 next_segment_radius -= base_radius * child_hyperparameters.parent_radius_taper / child_hyperparameters.parent_segments
+                next_segment.radius_end = next_segment_radius
 
                 # Perturbate the orientation of the next segment
                 next_segment_orientation = next_segment_orientation.rotate(
@@ -216,6 +228,9 @@ class TreeStructure:
         while len(branch_queue) > 0:
             parent: TreeBranch = branch_queue.pop(0)
             self.branch_segments += parent.segments
+            
+            if len(parent.segments) > 0:
+                parent.segments[-1].is_end_cap = True
 
             # Generate new branches
             parent_hyperparameters: TreeBranchHyperparameters = structure_hyperparameters[parent.level]

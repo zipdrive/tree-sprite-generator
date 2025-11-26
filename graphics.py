@@ -107,9 +107,9 @@ class TreeRenderer:
         Constructs vertices for the geometry of the branch segment.
         '''
         dir: Vector = segment.vec.normalize()
-        orth1: Vector = segment.radius * dir.cross(Vector.construct(depth=1.0))
+        orth1: Vector = dir.cross(Vector.construct(depth=1.0))
         orth2: Vector = dir.cross(orth1) # orth2 is orth1 rotated 90 degrees counterclockwise around dir
-        radial_segments: int = 8
+        radial_segments: int = 32
         angle: float = 0.0
         vertices: list[Vertex] = []
 
@@ -117,12 +117,13 @@ class TreeRenderer:
         while angle < math.tau and not np.isclose(angle, math.tau):
             # Determine the vertices of the two triangles composing this radial segment
             next_angle: float = angle + (math.tau / radial_segments)
-            normal00: Vector = ((math.cos(angle) * orth1) + (math.sin(angle) * orth2)).normalize()
-            normal01: Vector = ((math.cos(next_angle) * orth1) + (math.sin(next_angle) * orth2)).normalize()
-            corner00: Vector = segment.start + (math.cos(angle) * orth1) + (math.sin(angle) * orth2)
-            corner01: Vector = segment.start + (math.cos(next_angle) * orth1) + (math.sin(next_angle) * orth2)
-            corner10: Vector = segment.vec + corner00
-            corner11: Vector = segment.vec + corner01 
+            normal00: Vector = (math.cos(angle) * orth1) + (math.sin(angle) * orth2)
+            normal01: Vector = (math.cos(next_angle) * orth1) + (math.sin(next_angle) * orth2)
+            corner00: Vector = segment.start + (normal00 * segment.radius_base)
+            corner01: Vector = segment.start + (normal01 * segment.radius_base)
+            corner10: Vector = segment.start + segment.vec + (normal00 * segment.radius_end)
+            corner11: Vector = segment.start + segment.vec + (normal01 * segment.radius_end)
+            end_center: Vector = segment.start + segment.vec
             
             # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
             vertices += [
@@ -133,9 +134,16 @@ class TreeRenderer:
                 Vertex(corner10, normal00),
                 Vertex(corner01, normal01)
             ]
-            angle = next_angle
 
-        # TODO end cap?
+            # Compose end cap triangle from [corner10, corner11, end_center]
+            vertices += [
+                Vertex(corner10, dir),
+                Vertex(corner11, dir),
+                Vertex(end_center, dir)
+            ]
+
+            # Advance iteration
+            angle = next_angle
 
         return vertices
 
@@ -149,6 +157,7 @@ class TreeRenderer:
         '''
         # Set up the context
         ctx: moderngl.Context = moderngl.create_context(standalone=True)
+        ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
         prog: moderngl.Program = self.create_program(ctx)
 
         # Initialize the projection matrix
@@ -157,9 +166,9 @@ class TreeRenderer:
         prog['proj_matrix'].write(
             np.array([
                 [2.0 * self.zoom / width, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0002, 0.0],
                 [0.0, -2.0 * self.zoom / height, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 1.0]
+                [0.0, 0.0, 0.002, 0.0],
+                [0.0, 1.0 - (15.0 * self.zoom / height), 0.0, 1.0]
             ]).astype('f4').tobytes()
         )
 
@@ -169,9 +178,9 @@ class TreeRenderer:
             vertices += self.geometrize_branch_segment(structure.branch_segments[k])
         vertex_data = np.dstack(
             [
-                [vertices[k].pos.vector[0] for k in range(len(vertices))],
-                [vertices[k].pos.vector[1] for k in range(len(vertices))],
-                [vertices[k].pos.vector[2] for k in range(len(vertices))],
+                [vertices[k].pos.horizontal for k in range(len(vertices))],
+                [vertices[k].pos.vertical for k in range(len(vertices))],
+                [vertices[k].pos.depth for k in range(len(vertices))],
                 [vertices[k].normal.vector[0] for k in range(len(vertices))],
                 [vertices[k].normal.vector[1] for k in range(len(vertices))],
                 [vertices[k].normal.vector[2] for k in range(len(vertices))]

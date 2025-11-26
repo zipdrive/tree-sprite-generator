@@ -66,19 +66,37 @@ TEST_GENUS_01: Genus = Genus(
     name='test01', 
     branches=[
         TreeBranchHyperparameters(
-            length=190.47,
+            length=600.47,
             radius=20.0,
             gnarliness=0.03,
             num_segments=12,
-            num_children=7,
+            num_children=15,
             child_branching_angle=48*math.pi/180,
             child_min_branching_point=0.23
         ),
         TreeBranchHyperparameters(
-            length=50.14,
+            length=300.14,
             radius=0.63,
             gnarliness=0.25,
-            num_segments=8
+            num_segments=8,
+            num_children=6,
+            child_branching_angle=75*math.pi/180,
+            child_min_branching_point=0.33
+        ),
+        TreeBranchHyperparameters(
+            length=40.51,
+            radius=0.76,
+            gnarliness=0.20,
+            num_segments=6,
+            num_children=3,
+            child_branching_angle=60*math.pi/180,
+            child_min_branching_point=0.0
+        ),
+        TreeBranchHyperparameters(
+            length=8.6,
+            radius=0.70,
+            gnarliness=0.09,
+            num_segments=4
         )
     ]
 )

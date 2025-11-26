@@ -3,7 +3,7 @@ import math
 import random
 import numpy as np
 from typing import Callable, Self, Any
-from util import rotated, normalized
+from util import Vector
 
 class TreeBranchHyperparameters:
     parent_length: float
@@ -46,7 +46,7 @@ class TreeBranchHyperparameters:
     The minimum ratio of the parent branch where a child branch can sprout.
     '''
 
-    tropism_vec: np.typing.NDArray[np.floating[Any]]
+    tropism_vec: Vector
     '''
     The tropism vector that influences the weight.
     '''
@@ -65,7 +65,7 @@ class TreeBranchHyperparameters:
         num_children: int = 0,
         child_branching_angle: float = math.pi / 3,
         child_min_branching_point: float = 0.3,
-        tropism_vector: np.typing.NDArray[np.floating[Any]] = np.array([0.0, 0.0, 1.0]),
+        tropism_vector: Vector = Vector.construct(vertical=1.0),
         tropism_factor: float = 0.025
         ):
         '''
@@ -95,12 +95,12 @@ class TreeBranchHyperparameters:
 
 
 class TreeBranchSegment:
-    start: np.typing.NDArray[np.floating[Any]]
+    start: Vector
     '''
     The root position of the branch.
     '''
 
-    vec: np.typing.NDArray[np.floating[Any]]
+    vec: Vector
     '''
     The direction and magnitude of the branch.
     '''
@@ -110,7 +110,7 @@ class TreeBranchSegment:
     The radius of the branch.
     '''
 
-    def __init__(self, start: np.typing.NDArray[np.floating[Any]], vec: np.typing.NDArray[np.floating[Any]], radius: float):
+    def __init__(self, start: Vector, vec: Vector, radius: float):
         self.start = start
         self.vec = vec 
         self.radius = radius
@@ -153,8 +153,8 @@ class TreeStructure:
             
             # Figure out the starting position and orientation of the branch
             child_hyperparameters: TreeBranchHyperparameters = structure_hyperparameters[child.level]
-            next_segment_start: np.typing.NDArray[np.floating[Any]]
-            next_segment_orientation: np.typing.NDArray[np.floating[Any]]
+            next_segment_start: Vector
+            next_segment_orientation: Vector
             base_radius: float = child_hyperparameters.parent_radius
             if parent != None:
                 # Randomly generate a branching point
@@ -168,21 +168,19 @@ class TreeStructure:
                 base_radius *= parent.segments[q].radius
 
                 # Calculate a branching orientation
-                parent_orientation: np.typing.NDArray[np.floating[Any]] = normalized(parent.segments[q].vec)
-                norm1: np.typing.NDArray[np.floating[Any]] = np.cross(parent_orientation, np.array([1.0, 0.0, 0.0]))
-                next_segment_orientation = rotated(
-                    input=rotated(
-                        input=parent.segments[q].vec, 
+                parent_orientation: Vector = parent.segments[q].vec.normalize()
+                norm1: np.typing.NDArray[np.floating[Any]] = parent_orientation.cross(Vector.construct(horizontal=1.0))
+                next_segment_orientation = parent.segments[q].vec.rotate(
                         angle=parent_hyperparameters.child_angle, 
                         axis=norm1
-                    ),
-                    axis=parent_orientation,
-                    angle=random.random() * math.tau
-                )
+                    ).rotate(
+                        axis=parent_orientation,
+                        angle=random.random() * math.tau
+                    )
             else:
                 # No parent, so generate a basic trunk
-                next_segment_start = np.array([0.0, 0.0, 0.0])
-                next_segment_orientation = np.array([0.0, 0.0, 1.0])
+                next_segment_start = Vector.construct()
+                next_segment_orientation = Vector.construct(vertical=1.0)
             next_segment_radius: float = base_radius
 
             # Create each segment of the branch
@@ -201,15 +199,13 @@ class TreeStructure:
                 next_segment_radius -= base_radius * child_hyperparameters.parent_radius_taper / child_hyperparameters.parent_segments
 
                 # Perturbate the orientation of the next segment
-                next_segment_orientation = rotated(
-                    input=rotated(
-                        input=next_segment_orientation,
-                        axis=np.cross(np.array([1.0, 0.0, 0.0]), next_segment_orientation),
+                next_segment_orientation = next_segment_orientation.rotate(
+                        axis=next_segment_orientation.cross(Vector.construct(horizontal=1.0)),
                         angle=random.random() * child_hyperparameters.parent_gnarliness * math.pi / 2
-                    ),
-                    axis=next_segment_orientation,
-                    angle=random.random() * math.tau
-                )
+                    ).rotate(
+                        axis=next_segment_orientation,
+                        angle=random.random() * math.tau
+                    )
                 next_segment_orientation = (child_hyperparameters.tropism_factor * child_hyperparameters.tropism_vec) + ((1.0 - child_hyperparameters.tropism_factor) * next_segment_orientation)
             return child 
         

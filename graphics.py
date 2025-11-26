@@ -1,8 +1,10 @@
+from __future__ import annotations
 import math
 import numpy as np
 import png
+import moderngl
 from typing import Any, Generator
-from util import normalized, rotated
+from util import Vector
 from structure import TreeBranchSegment, TreeStructure
 
 class Image:
@@ -21,29 +23,35 @@ class Image:
     The pixels of the image.
     '''
 
-    z_index: list[float]
+    renderers: list[TreeRenderer]
     '''
-    The z-indices of each pixel in the image.
+    The renderers for the image.
     '''
 
-    def __init__(self, width: int, height: int):
+    def __init__(self, renderers: list[TreeRenderer], width: int, height: int):
         '''
         Constructs an empty image.
         '''
+        self.renderers = renderers
         self.width = width
         self.height = height 
         self.pixels = [0 for _ in range(4 * width * height)]
-        self.z_index = [-math.inf for _ in range(width * height)]
 
-    def __getitem__(self, key: tuple[int, int]) -> tuple[int, int, int, int, float]:
+    def __getitem__(self, key: tuple[int, int]) -> tuple[int, int, int, int]:
         x, y = key
-        return tuple(self.pixels[(4 * ((self.width * y) + x)):(4 * ((self.width * y) + x + 1))] + self.z_index[((self.width * y) + x):((self.width * y) + x + 1)])
+        return tuple(self.pixels[(4 * ((self.width * y) + x)):(4 * ((self.width * y) + x + 1))])
     
-    def __setitem__(self, key: tuple[int, int], value: tuple[int, int, int, int, float]):
+    def __setitem__(self, key: tuple[int, int], value: tuple[int, int, int, int]):
         x, y = key
-        r, g, b, a, z = value
+        r, g, b, a = value
         self.pixels[(4 * ((self.width * y) + x)):(4 * ((self.width * y) + x + 1))] = (r, g, b, a)
-        self.z_index[((self.width * y) + x)] = z
+
+    def render(self, structure: TreeStructure):
+        '''
+        Renders the structure of a tree.
+        '''
+        for k in range(len(self.renderers)):
+            self.renderers[k].render(structure, self)
 
     def save(self, filename: str):
         '''
@@ -58,130 +66,80 @@ class Image:
         data = png.from_array(rows, 'RGBA')
         data.save(filename)
 
-
-class Ray:
-    start: np.typing.NDArray[np.floating[Any]]
+class Vertex:
+    pos: Vector 
     '''
-    The start of the ray.
-    '''
-
-    orientation: np.typing.NDArray[np.floating[Any]]
-    '''
-    The orientation of the ray.
+    The position of the vertex.
     '''
 
-    def __init__(self, start: np.typing.NDArray[np.floating[Any]], orientation: np.typing.NDArray[np.floating[Any]]):
-        self.start = start
-        self.orientation = orientation
+    normal: Vector
+    '''
+    The normal to the vertex.
+    '''
 
-    class NoIntersectionException(Exception):
-        def __init__(self):
-            super().__init__("No intersection with ray.")
-
-    def find_all_intersections(self, segment: TreeBranchSegment) -> Generator[tuple[float, np.typing.NDArray[np.floating[Any]], np.typing.NDArray[np.floating[Any]]], None, None]:
-        '''
-        Finds all potentially forward-facing intersections with the cylinder.
-        '''
-        # Forward-facing intersection with cylinder wall
-        b: np.typing.NDArray[np.floating[Any]] = segment.start - self.start 
-        a: np.typing.NDArray[np.floating[Any]] = normalized(segment.vec)
-        n_cross_a: np.typing.NDArray[np.floating[Any]] = np.cross(self.orientation, a)
-        d_denom: float = np.dot(n_cross_a, n_cross_a)
-        d_det: float = (d_denom * (segment.radius ** 2)) - (np.dot(b, n_cross_a) ** 2)
-        if not np.isclose(d_denom, 0.0) and (d_det > 0.0 or np.isclose(d_det, 0.0)):
-            d_numer: float = np.dot(n_cross_a, np.cross(b, a)) + (0.0 if np.isclose(d_det, 0.0) else math.sqrt(d_det))
-            d: float = d_numer / d_denom
-            pos: np.typing.NDArray[np.floating[Any]] = self.start + (d * self.orientation)
-            t: float = np.dot(a, pos - segment.start)
-            if t > 0.0 and t < 1.0:
-                norm: np.typing.NDArray[np.floating[Any]] = normalized(pos - (segment.start + (segment.vec * t)))
-                yield (d, pos, norm)
-
-        n_dot_a: float = np.dot(a, self.orientation)
-        if not np.isclose(n_dot_a, 0.0):
-            # End cap 1
-            d1: float = np.dot(a, b) / n_dot_a 
-            pos1: np.typing.NDArray[np.floating[Any]] = self.start + (d1 * self.orientation)
-            r1: float = np.linalg.norm(pos1 - segment.start)
-            if r1 < segment.radius:
-                yield (d1, pos1, -a)
-
-            # End cap 2
-            d2: float = np.dot(a, b + segment.vec)
-            pos2: np.typing.NDArray[np.floating[Any]] = self.start + (d2 * self.orientation)
-            r2: float = np.linalg.norm(pos2 - (segment.start + segment.vec))
-            if r2 < segment.radius:
-                yield (d2, pos2, a)
-
-    def find_intersection(self, segment: TreeBranchSegment) -> tuple[np.typing.NDArray[np.floating[Any]], np.typing.NDArray[np.floating[Any]]]:
-        '''
-        Finds the most forward-facing intersection with the cylinder.
-        '''
-        d_best: float = math.inf
-        pos_norm_best: tuple[np.typing.NDArray[np.floating[Any]], np.typing.NDArray[np.floating[Any]]] | None = None
-        for d, pos, norm in self.find_all_intersections(segment):
-            if d < d_best:
-                d_best = d 
-                pos_norm_best = (pos, norm)
-        if pos_norm_best == None:
-            raise self.NoIntersectionException()
-        return pos_norm_best 
-    
+    def __init__(self, pos: Vector, normal: Vector):
+        self.pos = pos
+        self.normal = normal
 
 class TreeRenderer:
     zoom: float 
+    x: int 
+    y: int 
+    width: int 
+    height: int 
 
-    def __init__(self, zoom: float = 1.0):
+    def __init__(self, zoom: float = 1.0, x: int = 0, y: int = 0, width: int = 300, height: int = 400):
         self.zoom = zoom
+        self.x = x 
+        self.y = y
+        self.width = width 
+        self.height = height
 
-    def fragment(self, 
-                 img: Image, 
-                 frag: tuple[int, int], 
-                 pos: np.typing.NDArray[np.floating[Any]], 
-                 normal: np.typing.NDArray[np.floating[Any]]
-                 ) -> tuple[int, int, int, int]:
+    def create_program(self, ctx: moderngl.Context) -> moderngl.Program:
+        '''
+        Creates the program used for rendering.
+        '''
         pass
 
-    def render_branch_segment(self, img: Image, segment: TreeBranchSegment):
-        orth: np.typing.NDArray[np.floating[Any]] = rotated(
-            input=segment.radius * normalized(segment.vec),
-            axis=np.array([0.0, 1.0, 0.0]),
-            angle=math.pi / 2
-        )
-        corner00: np.typing.NDArray[np.floating[Any]] = (segment.start + orth) * self.zoom
-        corner01: np.typing.NDArray[np.floating[Any]] = (segment.start - orth) * self.zoom
-        corner10: np.typing.NDArray[np.floating[Any]] = (segment.start + segment.vec + orth) * self.zoom 
-        corner11: np.typing.NDArray[np.floating[Any]] = (segment.start + segment.vec - orth) * self.zoom 
-        x_min: int = min(int(math.floor(corner00[0])), int(math.floor(corner01[0])), int(math.floor(corner10[0])), int(math.floor(corner11[0])))
-        x_max: int = max(int(math.ceil(corner00[0])), int(math.ceil(corner01[0])), int(math.ceil(corner10[0])), int(math.ceil(corner11[0])))
-        y_min: int = min(int(math.floor(corner00[2])), int(math.floor(corner01[2])), int(math.floor(corner10[2])), int(math.floor(corner11[2])))
-        y_max: int = max(int(math.ceil(corner00[2])), int(math.ceil(corner01[2])), int(math.ceil(corner10[2])), int(math.ceil(corner11[2])))
-        for x in range(x_min, x_max + 1):
-            for y in range(y_min, y_max + 1):
-                offset: float = 100.0
-                orientation: np.typing.NDArray[np.floating[Any]] = normalized(np.array([0.0, -0.0, -1.0]))
-                ray: Ray = Ray(
-                    start=np.array([x / self.zoom, 0.0, (y / self.zoom)]) - (offset * orientation),
-                    orientation=orientation
-                )
-                frag_x: int = x + (img.width // 2)
-                frag_y: int = img.height - y
-                if frag_x >= 0 and frag_x < img.width and frag_y >= 0 and frag_y < img.height:
-                    try:
-                        pos, normal = ray.find_intersection(segment)
-                        _, _, _, _, prior_depth_index = img[(x, y)]
-                        if prior_depth_index < pos[1]:
-                            r, g, b, a = self.fragment(
-                                img,
-                                frag=(frag_x, frag_y),
-                                pos=pos,
-                                normal=normal
-                            )
-                            img[(frag_x, frag_y)] = (r, g, b, a, pos[1])
-                    except ray.NoIntersectionException:
-                        pass
 
-    def render(self, structure: TreeStructure, filename: str):
+    def geometrize_branch_segment(self, segment: TreeBranchSegment, end_cap: bool = False) -> list[Vertex]:
+        '''
+        Constructs vertices for the geometry of the branch segment.
+        '''
+        dir: Vector = segment.vec.normalize()
+        orth1: Vector = segment.radius * dir.cross(Vector.construct(depth=1.0))
+        orth2: Vector = dir.cross(orth1) # orth2 is orth1 rotated 90 degrees counterclockwise around dir
+        radial_segments: int = 8
+        angle: float = 0.0
+        vertices: list[Vertex] = []
+
+        # Create geometry of cylinder walls in radial segments
+        while angle < math.tau and not np.isclose(angle, math.tau):
+            # Determine the vertices of the two triangles composing this radial segment
+            next_angle: float = angle + (math.tau / radial_segments)
+            normal00: Vector = ((math.cos(angle) * orth1) + (math.sin(angle) * orth2)).normalize()
+            normal01: Vector = ((math.cos(next_angle) * orth1) + (math.sin(next_angle) * orth2)).normalize()
+            corner00: Vector = segment.start + (math.cos(angle) * orth1) + (math.sin(angle) * orth2)
+            corner01: Vector = segment.start + (math.cos(next_angle) * orth1) + (math.sin(next_angle) * orth2)
+            corner10: Vector = segment.vec + corner00
+            corner11: Vector = segment.vec + corner01 
+            
+            # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
+            vertices += [
+                Vertex(corner00, normal00),
+                Vertex(corner01, normal01),
+                Vertex(corner10, normal00),
+                Vertex(corner11, normal01),
+                Vertex(corner10, normal00),
+                Vertex(corner01, normal01)
+            ]
+            angle = next_angle
+
+        # TODO end cap?
+
+        return vertices
+
+    def render(self, structure: TreeStructure, img: Image):
         '''
         Renders the tree to a PNG file.
 
@@ -189,36 +147,125 @@ class TreeRenderer:
             structure (TreeStructure): The structure of the tree to render.
             filename (str): The filename to render to.
         '''
-        img: Image = Image(300, 400)
+        # Set up the context
+        ctx: moderngl.Context = moderngl.create_context(standalone=True)
+        prog: moderngl.Program = self.create_program(ctx)
+
+        # Initialize the projection matrix
+        width = img.width if self.width == 0 else self.width 
+        height = img.height if self.height == 0 else self.height 
+        prog['proj_matrix'].write(
+            np.array([
+                [2.0 * self.zoom / width, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0002, 0.0],
+                [0.0, -2.0 * self.zoom / height, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 1.0]
+            ]).astype('f4').tobytes()
+        )
+
+        # Construct the vertices
+        vertices: list[Vertex] = []
         for k in range(len(structure.branch_segments)):
-            self.render_branch_segment(img, structure.branch_segments[k])
-        img.save(filename)
+            vertices += self.geometrize_branch_segment(structure.branch_segments[k])
+        vertex_data = np.dstack(
+            [
+                [vertices[k].pos.vector[0] for k in range(len(vertices))],
+                [vertices[k].pos.vector[1] for k in range(len(vertices))],
+                [vertices[k].pos.vector[2] for k in range(len(vertices))],
+                [vertices[k].normal.vector[0] for k in range(len(vertices))],
+                [vertices[k].normal.vector[1] for k in range(len(vertices))],
+                [vertices[k].normal.vector[2] for k in range(len(vertices))]
+            ]
+        )
+        vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
+        vao: moderngl.VertexArray = ctx.simple_vertex_array(prog, vbo, 'in_pos', 'in_normal')
+
+        # Do the rendering in the standalone context
+        fbo: moderngl.Framebuffer = ctx.simple_framebuffer((width, height))
+        fbo.use()
+        fbo.clear()
+        vao.render(moderngl.TRIANGLES)
+
+        # Write the render onto a PNG image
+        pixels: np.typing.NDArray[np.floating[Any]] = np.frombuffer(fbo.read(components=4, dtype='f4'), dtype='f4').reshape((width * height, 4))
+        x: int = 0
+        y: int = 0
+        for pixel in pixels:
+            r: int = min(255, int(math.floor(pixel[0] * 256)))
+            g: int = min(255, int(math.floor(pixel[1] * 256)))
+            b: int = min(255, int(math.floor(pixel[2] * 256)))
+            a: int = min(255, int(math.floor(pixel[3] * 256)))
+            img[(x, y)] = (r, g, b, a)
+
+            if x + 1 == width:
+                x = 0
+                y += 1
+            else:
+                x += 1
 
 class TreeSimpleRenderer(TreeRenderer):
     '''
     A simple renderer that renders a tree in grayscale.
     '''
 
-    def __init__(self, zoom: float = 1.0):
-        super().__init__(zoom)
+    def __init__(self, zoom = 1, x = 0, y = 0, width = 300, height = 400):
+        super().__init__(zoom, x, y, width, height)
 
-    def fragment(self, img: Image, frag: tuple[int, int], pos: np.ndarray[tuple[Any, ...], np.dtype[np.floating[Any]]], normal: np.ndarray[tuple[Any, ...], np.dtype[np.floating[Any]]]) -> tuple[int, int, int, int]:
-        luma: int = 255
-        return (luma, luma, luma, 255)
+    def create_program(self, ctx):
+        return ctx.program(
+            vertex_shader='''
+#version 330
+
+uniform mat4 proj_matrix;
+in vec3 in_pos;
+in vec3 in_normal;
+
+void main() {
+    gl_Position = proj_matrix * vec4(in_pos, 1.0);
+}
+''',
+            fragment_shader='''
+#version 330
+
+out vec4 f_color;
+
+void main() {
+    f_color = vec4(1.0, 1.0, 1.0, 1.0);
+}
+'''
+        )
 
 class TreeNormalmapRenderer(TreeRenderer):
     '''
     A normalmap renderer for a tree.
     '''
 
-    def __init__(self, zoom: float = 1.0):
-        super().__init__(zoom)
+    def __init__(self, zoom = 1, x = 0, y = 0, width = 300, height = 400):
+        super().__init__(zoom, x, y, width, height)
 
-    def fragment(self, img: Image, frag: tuple[int, int], pos: np.ndarray[tuple[Any, ...], np.dtype[np.floating[Any]]], normal: np.ndarray[tuple[Any, ...], np.dtype[np.floating[Any]]]) -> tuple[int, int, int, int]:
-        n: np.typing.NDArray[np.floating[Any]] = np.floor(256 * (normal + np.array([1.0, 1.0, 1.0])))
-        return (
-            255 if n[0] > 255 else int(n[0]),
-            255 if n[1] > 255 else int(n[1]),
-            255 if n[2] > 255 else int(n[2]),
-            255
+    def create_program(self, ctx):
+        return ctx.program(
+            vertex_shader='''
+#version 330
+
+uniform mat4 proj_matrix;
+in vec3 in_pos;
+in vec3 in_normal;
+out vec3 v_normal;
+
+void main() {
+    gl_Position = proj_matrix * vec4(in_pos, 1.0);
+    v_normal = in_normal;
+}
+''',
+            fragment_shader='''
+#version 330
+
+in vec3 v_normal;
+out vec4 f_color;
+
+void main() {
+    f_color = vec4(v_normal, 1.0);
+}
+'''
         )

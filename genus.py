@@ -4,7 +4,7 @@ import datetime
 import os
 import numpy as np
 from structure import TreeBranchHyperparameters, TreeStructure
-from graphics import TreeSimpleRenderer, TreeNormalmapRenderer, TreeRenderer
+from graphics import TreeSimpleRenderer, TreeNormalmapRenderer, TreeRenderer, Image
 
 class Genus:
     name: str 
@@ -17,14 +17,9 @@ class Genus:
     The keyframe phases of growth.
     '''
 
-    texture_renderer: TreeRenderer 
+    rendered_image: Image
     '''
-    Renders the texture of a tree.
-    '''
-
-    normal_renderer: TreeRenderer
-    '''
-    Renders the normalmap of a tree.
+    The final outputted image.
     '''
 
     def __init__(self, 
@@ -40,8 +35,13 @@ class Genus:
         self.branches = branches
 
         # Create the renderer
-        self.texture_renderer = TreeSimpleRenderer(zoom=1.0)
-        self.normal_renderer = TreeNormalmapRenderer(zoom=1.0)
+        self.rendered_image = Image(
+            renderers=[
+                TreeNormalmapRenderer(zoom=1.0, width=600, height=800),
+            ],
+            width=600,
+            height=800
+        )
 
 
     def generate_tree_structure(self, render_full: bool = False) -> TreeStructure:
@@ -52,8 +52,8 @@ class Genus:
         structure: TreeStructure = TreeStructure(self.branches)
 
         # Render the structure
-        self.texture_renderer.render(structure, f"{directory}/texture.png")
-        self.normal_renderer.render(structure, f"{directory}/normal.png")
+        self.rendered_image.render(structure)
+        self.rendered_image.save(f"{directory}/render.png")
 
         return structure
 
@@ -66,7 +66,7 @@ TEST_GENUS_01: Genus = Genus(
     name='test01', 
     branches=[
         TreeBranchHyperparameters(
-            length=90.47,
+            length=190.47,
             radius=20.0,
             gnarliness=0.03,
             num_segments=12,
@@ -78,25 +78,7 @@ TEST_GENUS_01: Genus = Genus(
             length=50.14,
             radius=0.63,
             gnarliness=0.25,
-            num_segments=8,
-            num_children=4,
-            child_branching_angle=75*math.pi/180,
-            child_min_branching_point=0.33
-        ),
-        TreeBranchHyperparameters(
-            length=18.51,
-            radius=0.76,
-            gnarliness=0.20,
-            num_segments=6,
-            num_children=3,
-            child_branching_angle=60*math.pi/180,
-            child_min_branching_point=0.0
-        ),
-        TreeBranchHyperparameters(
-            length=8.6,
-            radius=0.70,
-            gnarliness=0.09,
-            num_segments=4
+            num_segments=8
         )
     ]
 )

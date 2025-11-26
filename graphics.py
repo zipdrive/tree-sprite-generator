@@ -200,7 +200,7 @@ class TreeRenderer:
             np.array([
                 [2.0 * self.zoom / width, 0.0, 0.0, 0.0],
                 [0.0, -2.0 * self.zoom / height, 0.0, 0.0],
-                [0.0, 0.0, 0.002, 0.0],
+                [0.0, -0.0005, 0.002, 0.0],
                 [0.0, 1.0 - (15.0 * self.zoom / height), 0.0, 1.0]
             ]).astype('f4').tobytes()
         )
@@ -248,6 +248,38 @@ class TreeRenderer:
 class TreeSimpleRenderer(TreeRenderer):
     '''
     A simple renderer that renders a tree in grayscale.
+    '''
+
+    def __init__(self, zoom = 1, x = 0, y = 0, width = 300, height = 400):
+        super().__init__(zoom, x, y, width, height)
+
+    def create_program(self, ctx):
+        return ctx.program(
+            vertex_shader='''
+#version 330
+
+uniform mat4 proj_matrix;
+in vec3 in_pos;
+in vec3 in_normal;
+
+void main() {
+    gl_Position = proj_matrix * vec4(in_pos, 1.0);
+}
+''',
+            fragment_shader='''
+#version 330
+
+out vec4 f_color;
+
+void main() {
+    f_color = vec4(1.0, 1.0, 1.0, 1.0);
+}
+'''
+        )
+    
+class TreeBarkRenderer(TreeRenderer):
+    '''
+    A renderer that renders the flat bark texture.
     '''
 
     def __init__(self, zoom = 1, x = 0, y = 0, width = 300, height = 400):

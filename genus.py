@@ -37,8 +37,8 @@ class Genus:
         # Create the renderer
         self.rendered_image = Image(
             renderers=[
-                TreeBarkRenderer('assets/birch/wood_0027_color_1k.jpg', zoom=1.0, width=600, height=1200),
-                TreeNormalmapRenderer('assets/birch/normal.png', x=600, width=600, height=1200)
+                TreeBarkRenderer('assets/birch/color.png', zoom=1.0, width=600, height=1200),
+                TreeNormalmapRenderer(normalmap='assets/birch/normal.png', heightmap='assets/birch/height.png', x=600, width=600, height=1200)
             ],
             width=1200,
             height=1200

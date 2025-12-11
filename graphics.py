@@ -359,7 +359,8 @@ in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    vec4 sampled_color = texture(barkmap_tex, v_uv);
+    vec2 uv = vec2(v_uv.x + sqrt(0.2) * v_uv.y, v_uv.y);
+    vec4 sampled_color = texture(barkmap_tex, uv);
     f_color = sampled_color;
 }
 '''
@@ -382,9 +383,12 @@ class TreeNormalmapRenderer(TreeRenderer):
     The file for the normalmap texture.
     '''
 
-    def __init__(self, normalmap: str, zoom = 1, x = 0, y = 0, width = 300, height = 400):
+    heightmap: str
+
+    def __init__(self, normalmap: str, heightmap: str, zoom = 1, x = 0, y = 0, width = 300, height = 400):
         super().__init__(zoom, x, y, width, height)
         self.normalmap = normalmap
+        self.heightmap = heightmap
 
     def create_program(self, ctx):
         prog: moderngl.Program = ctx.program(
@@ -408,20 +412,38 @@ void main() {
 #version 330
 
 uniform sampler2D normalmap_tex;
+uniform sampler2D heightmap_tex;
 in vec3 v_normal;
 in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    vec4 sampled_normal = texture(normalmap_tex, v_uv);
-    f_color = sampled_normal;//vec4(0.5 * (vec3(1.0, 1.0, 1.0) + v_normal), 1.0);
+    vec2 uv = vec2(v_uv.x + sqrt(0.2) * v_uv.y, v_uv.y);
+    vec3 sampled_normal = texture(normalmap_tex, uv).xyz;
+    vec3 axis = cross(v_normal, sampled_normal);
+    vec3 sampled_normal_parallel = axis * dot(axis, sampled_normal);
+    vec3 sampled_normal_perpendicular = sampled_normal - sampled_normal_parallel;
+    vec3 v_normal_parallel = axis * dot(axis, v_normal);
+    vec3 v_normal_perpendicular = v_normal - v_normal_parallel;
+    vec3 true_normal = sampled_normal_parallel + (length(sampled_normal_perpendicular) + normalize(v_normal_perpendicular));
+
+    float sampled_height = texture(heightmap_tex, uv).r;
+
+    f_color = vec4(0.5 * (vec3(1.0, 1.0, 1.0) + true_normal * clamp(2.0 * sampled_height, 0.0, 1.0)), 1.0);
 }
 '''
         )
 
         # Load the normalmap texture
-        normalmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.normalmap)
-        normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex)
+        heightmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.normalmap)
+        heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex)
         prog['normalmap_tex'] = 0
-        normalmap_sampler2D.use(0)
+        heightmap_sampler2D.use(0)
+
+        # Load the depthmap texture
+        heightmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.heightmap)
+        heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex)
+        prog['heightmap_tex'] = 1
+        heightmap_sampler2D.use(1)
+
         return prog 

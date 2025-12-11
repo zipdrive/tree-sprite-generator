@@ -4,7 +4,7 @@ import datetime
 import os
 import numpy as np
 from structure import TreeBranchHyperparameters, TreeStructure
-from graphics import TreeSimpleRenderer, TreeNormalmapRenderer, TreeRenderer, Image
+from graphics import TreeBarkRenderer, TreeNormalmapRenderer, TreeRenderer, Image
 
 class Genus:
     name: str 
@@ -37,10 +37,11 @@ class Genus:
         # Create the renderer
         self.rendered_image = Image(
             renderers=[
-                TreeNormalmapRenderer(zoom=1.0, width=600, height=800),
+                TreeBarkRenderer('assets/birch/wood_0027_color_1k.jpg', zoom=1.0, width=600, height=1200),
+                TreeNormalmapRenderer('assets/birch/normal.png', x=600, width=600, height=1200)
             ],
-            width=600,
-            height=800
+            width=1200,
+            height=1200
         )
 
 
@@ -67,17 +68,18 @@ TEST_GENUS_01: Genus = Genus(
     branches=[
         TreeBranchHyperparameters(
             length=600.47,
-            radius=40.0,
-            gnarliness=0.03,
+            radius=25.0,
+            gnarliness=0.5,
             num_segments=12,
             num_children=15,
             child_branching_angle=48*math.pi/180,
-            child_min_branching_point=0.23
+            child_min_branching_point=0.23,
+            tropism_factor=0.3
         ),
         TreeBranchHyperparameters(
             length=300.14,
-            radius=0.33,
-            gnarliness=0.25,
+            radius=0.35,
+            gnarliness=0.5,
             num_segments=8,
             num_children=6,
             child_branching_angle=75*math.pi/180,
@@ -85,7 +87,7 @@ TEST_GENUS_01: Genus = Genus(
         ),
         TreeBranchHyperparameters(
             length=40.51,
-            radius=0.76,
+            radius=0.4,
             gnarliness=0.20,
             num_segments=6,
             num_children=3,
@@ -135,3 +137,7 @@ TEST_GENUS_01: Genus = Genus(
             num_segments=4
         )
 '''
+
+###########################
+# Test
+###########################

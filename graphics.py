@@ -1,11 +1,20 @@
 from __future__ import annotations
 import math
+import random
 import numpy as np
 import png
+from PIL import Image as PILImage
 import moderngl
 from typing import Any, Generator
 from util import Vector
 from structure import TreeBranchSegment, TreeStructure
+
+def read_file_into_texture(ctx: moderngl.Context, filename: str) -> moderngl.Texture:
+    '''
+    Reads a texture file into a moderngl Texture object.
+    '''
+    img: PILImage.Image = PILImage.open(filename).convert('RGBA')
+    return ctx.texture((img.width, img.height), 4, data=img.tobytes())
 
 class Image:
     width: int 
@@ -77,9 +86,15 @@ class Vertex:
     The normal to the vertex.
     '''
 
-    def __init__(self, pos: Vector, normal: Vector):
+    uv: tuple[float, float]
+    '''
+    The vertex UV.
+    '''
+
+    def __init__(self, pos: Vector, normal: Vector, uv: tuple[float, float]):
         self.pos = pos
         self.normal = normal
+        self.uv = uv
 
 class TreeRenderer:
     zoom: float 
@@ -100,85 +115,6 @@ class TreeRenderer:
         Creates the program used for rendering.
         '''
         pass
-
-
-    def geometrize_branch_segment(self, segment: TreeBranchSegment, next_segment: TreeBranchSegment | None) -> list[Vertex]:
-        '''
-        Constructs vertices for the geometry of the branch segment.
-        '''
-        dir0: Vector = segment.vec.normalize()
-        orth00: Vector = dir0.cross(Vector.construct(depth=1.0))
-        orth01: Vector = dir0.cross(orth00) # orth01 is orth00 rotated 90 degrees counterclockwise around dir
-        radial_segments: int = 8
-        angle: float = 0.0
-        vertices: list[Vertex] = []
-
-        # Create geometry of cylinder walls in radial segments
-        if next_segment == None or segment.is_end_cap:
-            # Don't consider segment after it, just make a straight cylinder
-            while angle < math.tau and not np.isclose(angle, math.tau):
-                # Determine the vertices of the two triangles composing this radial segment
-                next_angle: float = angle + (math.tau / radial_segments)
-                normal00: Vector = (math.cos(angle) * orth00) + (math.sin(angle) * orth01)
-                normal01: Vector = (math.cos(next_angle) * orth00) + (math.sin(next_angle) * orth01)
-                corner00: Vector = segment.start + (normal00 * segment.radius_base)
-                corner01: Vector = segment.start + (normal01 * segment.radius_base)
-                corner10: Vector = segment.start + segment.vec + (normal00 * segment.radius_end)
-                corner11: Vector = segment.start + segment.vec + (normal01 * segment.radius_end)
-                end_center: Vector = segment.start + segment.vec
-                
-                # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
-                vertices += [
-                    Vertex(corner01, normal01),
-                    Vertex(corner00, normal00),
-                    Vertex(corner10, normal00)
-                ]
-                vertices += [
-                    Vertex(corner10, normal00),
-                    Vertex(corner11, normal01),
-                    Vertex(corner01, normal01)
-                ]
-
-                # Compose end cap triangle from [corner10, corner11, end_center]
-                vertices += [
-                    Vertex(corner11, dir0),
-                    Vertex(corner10, dir0),
-                    Vertex(end_center, dir0)
-                ]
-
-                # Advance iteration
-                angle = next_angle
-        else:
-            dir1: Vector = next_segment.vec.normalize()
-            orth10: Vector = dir1.cross(Vector.construct(depth=1.0))
-            orth11: Vector = dir1.cross(orth10)
-
-            while angle < math.tau and not np.isclose(angle, math.tau):
-                # Determine the vertices of the two triangles composing this radial segment
-                next_angle: float = angle + (math.tau / radial_segments)
-                normal00: Vector = (math.cos(angle) * orth00) + (math.sin(angle) * orth01)
-                normal01: Vector = (math.cos(next_angle) * orth00) + (math.sin(next_angle) * orth01)
-                normal10: Vector = (math.cos(angle) * orth10) + (math.sin(angle) * orth11)
-                normal11: Vector = (math.cos(next_angle) * orth10) + (math.sin(next_angle) * orth11)
-                corner00: Vector = segment.start + (normal00 * segment.radius_base)
-                corner01: Vector = segment.start + (normal01 * segment.radius_base)
-                corner10: Vector = segment.start + segment.vec + (normal10 * segment.radius_end)
-                corner11: Vector = segment.start + segment.vec + (normal11 * segment.radius_end)
-                
-                # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
-                vertices += [
-                    Vertex(corner01, normal01),
-                    Vertex(corner00, normal00),
-                    Vertex(corner10, normal10),
-                    Vertex(corner10, normal10),
-                    Vertex(corner11, normal11),
-                    Vertex(corner01, normal01)
-                ]
-
-                # Advance iteration
-                angle = next_angle
-
-        return vertices
 
     def render(self, structure: TreeStructure, img: Image):
         '''
@@ -205,22 +141,129 @@ class TreeRenderer:
             ]).astype('f4').tobytes()
         )
 
+        branch_segment_uv: dict[TreeBranchSegment, tuple[float, float]] = {}
+        def geometrize_branch_segment(segment: TreeBranchSegment) -> list[Vertex]:
+            '''
+            Constructs vertices for the geometry of the branch segment.
+            '''
+            dir0: Vector = segment.vec.normalize()
+            orth00: Vector = dir0.cross(Vector.construct(depth=1.0))
+            orth01: Vector = dir0.cross(orth00) # orth01 is orth00 rotated 90 degrees counterclockwise around dir
+            radial_segments: int = 8
+            angle: float = 0.0
+            u: float
+            v0: float
+            u, v0 = branch_segment_uv[segment] if segment in branch_segment_uv else (random.random(), random.random())
+            v1: float = v0 + (segment.vec.length / (math.tau * segment.radius_base))
+            vertices: list[Vertex] = []
+
+            # Create geometry of cylinder walls in radial segments
+            if segment.next_segment == None:
+                # Close end in a point
+                while angle < math.tau and not np.isclose(angle, math.tau):
+                    # Determine the vertices of the two triangles composing this radial segment
+                    next_angle: float = angle + (math.tau / radial_segments)
+                    normal00: Vector = (math.cos(angle) * orth00) + (math.sin(angle) * orth01)
+                    normal01: Vector = (math.cos(next_angle) * orth00) + (math.sin(next_angle) * orth01)
+                    corner00: Vector = segment.start + (normal00 * segment.radius_base)
+                    corner01: Vector = segment.start + (normal01 * segment.radius_base)
+                    corner1X: Vector = segment.start + segment.vec
+                    diff00_1X: Vector = corner1X - corner00
+                    diff01_1X: Vector = corner1X - corner01
+                    tangent00: Vector = normal00.cross(diff00_1X)
+                    tangent01: Vector = normal01.cross(diff01_1X)
+                    normal00, normal01 = diff00_1X.cross(tangent00).normalize(), diff01_1X.cross(tangent01).normalize()
+                    normal1X: Vector = dir0
+
+                    # Determine the UV coordinates
+                    u0: float = u
+                    u1: float = u + (1.0 / radial_segments)
+                    u = u1
+                    
+                    # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
+                    vertices += [
+                        Vertex(corner01, normal01, (u1, v0)),
+                        Vertex(corner00, normal00, (u0, v0)),
+                        Vertex(corner1X, normal1X, (0.5 * (u0 + u1), v1))
+                    ]
+
+                    # Advance iteration
+                    angle = next_angle
+            else:
+                dir1: Vector = segment.next_segment.vec.normalize()
+                orth10: Vector = dir1.cross(Vector.construct(depth=1.0))
+                orth11: Vector = dir1.cross(orth10)
+
+                while angle < math.tau and not np.isclose(angle, math.tau):
+                    # Determine the vertices of the two triangles composing this radial segment
+                    next_angle: float = angle + (math.tau / radial_segments)
+                    normal00: Vector = (math.cos(angle) * orth00) + (math.sin(angle) * orth01)
+                    normal01: Vector = (math.cos(next_angle) * orth00) + (math.sin(next_angle) * orth01)
+                    normal10: Vector = (math.cos(angle) * orth10) + (math.sin(angle) * orth11)
+                    normal11: Vector = (math.cos(next_angle) * orth10) + (math.sin(next_angle) * orth11)
+                    corner00: Vector = segment.start + (normal00 * segment.radius_base)
+                    corner01: Vector = segment.start + (normal01 * segment.radius_base)
+                    corner10: Vector = segment.start + segment.vec + (normal10 * segment.radius_end)
+                    corner11: Vector = segment.start + segment.vec + (normal11 * segment.radius_end)
+                    
+                    # Determine the UV coordinates
+                    u0: float = u
+                    u1: float = u + (1.0 / radial_segments)
+                    u = u1
+                    
+                    # Compose triangles from [corner00, corner01, corner10] and [corner11, corner10, corner01]
+                    vertices += [
+                        Vertex(corner01, normal01, (u1, v0)),
+                        Vertex(corner00, normal00, (u0, v0)),
+                        Vertex(corner10, normal10, (u0, v1)),
+                        Vertex(corner10, normal10, (u0, v1)),
+                        Vertex(corner11, normal11, (u1, v1)),
+                        Vertex(corner01, normal01, (u1, v0))
+                    ]
+
+                    # Advance iteration
+                    angle = next_angle
+                
+                branch_segment_uv[segment.next_segment] = (u - math.floor(u), v1 - math.floor(v1))
+
+            return vertices
+
         # Construct the vertices
         vertices: list[Vertex] = []
         for k in range(len(structure.branch_segments)):
-            vertices += self.geometrize_branch_segment(structure.branch_segments[k], structure.branch_segments[k + 1] if k < len(structure.branch_segments) - 1 else None)
-        vertex_data = np.dstack(
-            [
-                [vertices[k].pos.horizontal for k in range(len(vertices))],
-                [vertices[k].pos.vertical for k in range(len(vertices))],
-                [vertices[k].pos.depth for k in range(len(vertices))],
-                [vertices[k].normal.vector[0] for k in range(len(vertices))],
-                [vertices[k].normal.vector[1] for k in range(len(vertices))],
-                [vertices[k].normal.vector[2] for k in range(len(vertices))]
-            ]
-        )
-        vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
-        vao: moderngl.VertexArray = ctx.simple_vertex_array(prog, vbo, 'in_pos', 'in_normal')
+            vertices += geometrize_branch_segment(structure.branch_segments[k])
+        
+        prog_attrs: list = []
+        if 'in_pos' in prog:
+            vertex_data = np.dstack(
+                [
+                    [vertices[k].pos.horizontal for k in range(len(vertices))],
+                    [vertices[k].pos.vertical for k in range(len(vertices))],
+                    [vertices[k].pos.depth for k in range(len(vertices))]
+                ]
+            )
+            vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
+            prog_attrs.append((vbo, '3f', 'in_pos'))
+        if 'in_normal' in prog:
+            vertex_data = np.dstack(
+                [
+                    [vertices[k].normal.horizontal for k in range(len(vertices))],
+                    [vertices[k].normal.depth for k in range(len(vertices))],
+                    [vertices[k].normal.vertical for k in range(len(vertices))]
+                ]
+            )
+            vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
+            prog_attrs.append((vbo, '3f', 'in_normal'))
+        if 'in_uv' in prog:
+            vertex_data = np.dstack(
+                [
+                    [vertices[k].uv[0] for k in range(len(vertices))],
+                    [vertices[k].uv[1] for k in range(len(vertices))]
+                ]
+            )
+            vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
+            prog_attrs.append((vbo, '2f', 'in_uv'))
+        vao: moderngl.VertexArray = ctx.vertex_array(prog, prog_attrs)
 
         # Do the rendering in the standalone context
         fbo: moderngl.Framebuffer = ctx.simple_framebuffer((width, height))
@@ -230,8 +273,8 @@ class TreeRenderer:
 
         # Write the render onto a PNG image
         pixels: np.typing.NDArray[np.floating[Any]] = np.frombuffer(fbo.read(components=4, dtype='f4'), dtype='f4').reshape((width * height, 4))
-        x: int = 0
-        y: int = 0
+        x: int = self.x
+        y: int = self.y
         for pixel in pixels:
             r: int = min(255, int(math.floor(pixel[0] * 256)))
             g: int = min(255, int(math.floor(pixel[1] * 256)))
@@ -239,8 +282,8 @@ class TreeRenderer:
             a: int = min(255, int(math.floor(pixel[3] * 256)))
             img[(x, y)] = (r, g, b, a)
 
-            if x + 1 == width:
-                x = 0
+            if x + 1 == self.x + width:
+                x = self.x 
                 y += 1
             else:
                 x += 1
@@ -261,6 +304,7 @@ class TreeSimpleRenderer(TreeRenderer):
 uniform mat4 proj_matrix;
 in vec3 in_pos;
 in vec3 in_normal;
+in vec2 in_uv;
 
 void main() {
     gl_Position = proj_matrix * vec4(in_pos, 1.0);
@@ -282,64 +326,102 @@ class TreeBarkRenderer(TreeRenderer):
     A renderer that renders the flat bark texture.
     '''
 
-    def __init__(self, zoom = 1, x = 0, y = 0, width = 300, height = 400):
+    barkmap: str 
+    '''
+    The filename of the bark texture.
+    '''
+
+    def __init__(self, barkmap: str, zoom = 1, x = 0, y = 0, width = 300, height = 400):
         super().__init__(zoom, x, y, width, height)
+        self.barkmap = barkmap
 
     def create_program(self, ctx):
-        return ctx.program(
+        prog: moderngl.Program = ctx.program(
             vertex_shader='''
 #version 330
 
 uniform mat4 proj_matrix;
 in vec3 in_pos;
 in vec3 in_normal;
+in vec2 in_uv;
+out vec2 v_uv;
 
 void main() {
     gl_Position = proj_matrix * vec4(in_pos, 1.0);
+    v_uv = in_uv;
 }
 ''',
             fragment_shader='''
 #version 330
 
+uniform sampler2D barkmap_tex;
+in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    f_color = vec4(1.0, 1.0, 1.0, 1.0);
+    vec4 sampled_color = texture(barkmap_tex, v_uv);
+    f_color = sampled_color;
 }
 '''
         )
+
+        # Load the barkmap texture
+        barkmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.barkmap)
+        barkmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=barkmap_tex)
+        prog['barkmap_tex'] = 0
+        barkmap_sampler2D.use(0)
+        return prog 
 
 class TreeNormalmapRenderer(TreeRenderer):
     '''
     A normalmap renderer for a tree.
     '''
 
-    def __init__(self, zoom = 1, x = 0, y = 0, width = 300, height = 400):
+    normalmap: str 
+    '''
+    The file for the normalmap texture.
+    '''
+
+    def __init__(self, normalmap: str, zoom = 1, x = 0, y = 0, width = 300, height = 400):
         super().__init__(zoom, x, y, width, height)
+        self.normalmap = normalmap
 
     def create_program(self, ctx):
-        return ctx.program(
+        prog: moderngl.Program = ctx.program(
             vertex_shader='''
 #version 330
 
 uniform mat4 proj_matrix;
 in vec3 in_pos;
 in vec3 in_normal;
+in vec2 in_uv;
 out vec3 v_normal;
+out vec2 v_uv;
 
 void main() {
     gl_Position = proj_matrix * vec4(in_pos, 1.0);
     v_normal = in_normal;
+    v_uv = in_uv;
 }
 ''',
             fragment_shader='''
 #version 330
 
+uniform sampler2D normalmap_tex;
 in vec3 v_normal;
+in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    f_color = vec4(0.5 * (vec3(1.0, 1.0, 1.0) + v_normal), 1.0);
+    vec4 sampled_normal = texture(normalmap_tex, v_uv);
+    f_color = sampled_normal;//vec4(0.5 * (vec3(1.0, 1.0, 1.0) + v_normal), 1.0);
 }
 '''
         )
+
+        # Load the normalmap texture
+        normalmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.normalmap)
+        normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex)
+        prog['normalmap_tex'] = 0
+        normalmap_sampler2D.use(0)
+        return prog 

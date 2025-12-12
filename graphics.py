@@ -473,7 +473,7 @@ void main() {
 
         # Load the barkmap texture
         barkmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.barkmap)
-        barkmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=barkmap_tex)
+        barkmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=barkmap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
         prog['barkmap_tex'] = 0
         barkmap_sampler2D.use(0)
         return prog 
@@ -591,7 +591,7 @@ void main() {
     float v_normal_posterized_z_angle = round(v_normal_z_angle * 4.0 / PI) * PI / 4.0;
     vec3 surface_normal = normalize(vec3(sin(v_normal_posterized_xy_angle), -cos(v_normal_posterized_xy_angle), sin(v_normal_posterized_z_angle)));
 
-    vec3 axis = cross(vec3(0.0, -1.0, 0.0), surface_normal);
+    vec3 axis = cross(vec3(1.0, 0.0, 0.0), surface_normal);
     vec3 sampled_normal_parallel = axis * dot(axis, sampled_normal);
     vec3 sampled_normal_perpendicular = sampled_normal - sampled_normal_parallel;
     vec3 true_normal = sampled_normal_parallel + (length(sampled_normal_perpendicular) * surface_normal);
@@ -605,13 +605,13 @@ void main() {
 
         # Load the normalmap texture
         normalmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.normalmap)
-        normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex)
+        normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
         prog['normalmap_tex'] = 0
         normalmap_sampler2D.use(0)
 
         # Load the depthmap texture
         heightmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.heightmap)
-        heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex)
+        heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
         prog['heightmap_tex'] = 1
         heightmap_sampler2D.use(1)
 
@@ -754,17 +754,17 @@ void main() {
 
     vec4 untransformed_sampled_color = texture(colormap_tex, uv);
     vec4 sampled_color = palette * vec4(untransformed_sampled_color.rgb, 1.0);
-    vec3 sampled_normal = normalize(texture(normalmap_tex, uv).xzy - 0.5);
+    vec3 sampled_normal = vec3(0.0, 1.0, 0.0);// normalize(texture(normalmap_tex, uv).xzy - 0.5);
     sampled_normal.y = -sampled_normal.y;
 
     float v_normal_xy_angle = atan(v_normal.x, -v_normal.y);
     float v_normal_xy_magn = length(v_normal.xy);
     float v_normal_z_angle = atan(v_normal.z, v_normal_xy_magn);
-    float v_normal_posterized_xy_angle = round(v_normal_xy_angle * 1.5 / PI) * PI / 1.5;
+    float v_normal_posterized_xy_angle = round(v_normal_xy_angle * 5.0 / PI) * PI / 5.0;
     float v_normal_posterized_z_angle = round(v_normal_z_angle * 4.0 / PI) * PI / 4.0;
     vec3 surface_normal = normalize(vec3(sin(v_normal_posterized_xy_angle), -cos(v_normal_posterized_xy_angle), sin(v_normal_posterized_z_angle)));
 
-    vec3 axis = cross(vec3(0.0, -1.0, 0.0), surface_normal);
+    vec3 axis = cross(vec3(1.0, 0.0, 0.0), surface_normal);
     vec3 sampled_normal_parallel = axis * dot(axis, sampled_normal);
     vec3 sampled_normal_perpendicular = sampled_normal - sampled_normal_parallel;
     vec3 true_normal = sampled_normal_parallel + (length(sampled_normal_perpendicular) * surface_normal);
@@ -772,7 +772,8 @@ void main() {
     float sampled_height = texture(heightmap_tex, uv).r;
     float depth_shadow_factor = clamp(2.0 * sampled_height, 0.0, 1.0);
 
-    f_color = vec4(sampled_color.rgb * dot(true_normal, normalize(vec3(0.5, -1.0, 1.0))) * depth_shadow_factor, untransformed_sampled_color.a);
+    vec3 ambient = vec3(15.0 / 255.0, 15.0 / 255.0, 105.0 / 255.0);
+    f_color = vec4(ambient + (sampled_color.rgb - ambient) * dot(true_normal, normalize(vec3(-0.5, -1.0, 1.0))) * depth_shadow_factor, untransformed_sampled_color.a);
 }
 '''
         )
@@ -782,19 +783,19 @@ void main() {
 
         # Load the colormap texture
         colormap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.bark_colormap)
-        colormap_sampler2D: moderngl.Sampler = ctx.sampler(texture=colormap_tex)
+        colormap_sampler2D: moderngl.Sampler = ctx.sampler(texture=colormap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
         prog['colormap_tex'] = 0
         colormap_sampler2D.use(0)
 
         # Load the normalmap texture
         normalmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.bark_normalmap)
-        normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex)
-        prog['normalmap_tex'] = 1
+        normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
+        #prog['normalmap_tex'] = 1
         normalmap_sampler2D.use(1)
 
         # Load the depthmap texture
         heightmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.bark_heightmap)
-        heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex)
+        heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
         prog['heightmap_tex'] = 2
         heightmap_sampler2D.use(2)
 

@@ -110,9 +110,9 @@ class TreeRenderer:
         self.width = width 
         self.height = height
 
-    def create_program(self, ctx: moderngl.Context) -> moderngl.Program:
+    def create_branch_program(self, ctx: moderngl.Context) -> moderngl.Program:
         '''
-        Creates the program used for rendering.
+        Creates the program used for rendering branches.
         '''
         pass
 
@@ -127,7 +127,7 @@ class TreeRenderer:
         # Set up the context
         ctx: moderngl.Context = moderngl.create_context(standalone=True)
         ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
-        prog: moderngl.Program = self.create_program(ctx)
+        prog: moderngl.Program = self.create_branch_program(ctx)
 
         # Initialize the projection matrix
         width = img.width if self.width == 0 else self.width 
@@ -296,7 +296,7 @@ class TreeSimpleRenderer(TreeRenderer):
     def __init__(self, zoom = 1, x = 0, y = 0, width = 300, height = 400):
         super().__init__(zoom, x, y, width, height)
 
-    def create_program(self, ctx):
+    def create_branch_program(self, ctx):
         return ctx.program(
             vertex_shader='''
 #version 330
@@ -335,7 +335,7 @@ class TreeBarkRenderer(TreeRenderer):
         super().__init__(zoom, x, y, width, height)
         self.barkmap = barkmap
 
-    def create_program(self, ctx):
+    def create_branch_program(self, ctx):
         prog: moderngl.Program = ctx.program(
             vertex_shader='''
 #version 330
@@ -359,7 +359,7 @@ in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    vec2 uv = vec2(v_uv.x + sqrt(0.2) * v_uv.y, v_uv.y);
+    vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
     vec4 sampled_color = texture(barkmap_tex, uv);
     f_color = sampled_color;
 }
@@ -390,7 +390,7 @@ class TreeNormalmapRenderer(TreeRenderer):
         self.normalmap = normalmap
         self.heightmap = heightmap
 
-    def create_program(self, ctx):
+    def create_branch_program(self, ctx):
         prog: moderngl.Program = ctx.program(
             vertex_shader='''
 #version 330
@@ -418,7 +418,7 @@ in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    vec2 uv = vec2(v_uv.x + sqrt(0.2) * v_uv.y, v_uv.y);
+    vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
     vec3 sampled_normal = texture(normalmap_tex, uv).xyz;
     vec3 axis = cross(v_normal, sampled_normal);
     vec3 sampled_normal_parallel = axis * dot(axis, sampled_normal);

@@ -24,7 +24,10 @@ class Genus:
 
     def __init__(self, 
                     name: str, 
-                    branches: list[TreeBranchHyperparameters]
+                    branches: list[TreeBranchHyperparameters],
+                    color_texture: str,
+                    normalmap_texture: str,
+                    heightmap_texture: str
                     ):
         '''
         Args:
@@ -37,8 +40,8 @@ class Genus:
         # Create the renderer
         self.rendered_image = Image(
             renderers=[
-                TreeBarkRenderer('assets/birch/color.png', zoom=1.0, width=600, height=1200),
-                TreeNormalmapRenderer(normalmap='assets/birch/normal.png', heightmap='assets/birch/height.png', x=600, width=600, height=1200)
+                TreeBarkRenderer(color_texture, zoom=1.0, width=600, height=1200),
+                TreeNormalmapRenderer(normalmap=normalmap_texture, heightmap=heightmap_texture, x=600, width=600, height=1200)
             ],
             width=1200,
             height=1200
@@ -60,11 +63,11 @@ class Genus:
 
 
 ###########################
-# Test
+# Birch trees
 ###########################
 
-TEST_GENUS_01: Genus = Genus( 
-    name='test01', 
+BIRCH_LARGE: Genus = Genus( 
+    name='Betula', 
     branches=[
         TreeBranchHyperparameters(
             length=600.47,
@@ -100,44 +103,8 @@ TEST_GENUS_01: Genus = Genus(
             gnarliness=0.09,
             num_segments=4
         )
-    ]
+    ],
+    color_texture='assets/birch/color.png',
+    normalmap_texture='assets/birch/normal.png',
+    heightmap_texture='assets/birch/height.png'
 )
-'''
-        TreeBranchHyperparameters(
-            length=90.47,
-            radius=20.0,
-            gnarliness=0.03,
-            num_segments=12,
-            num_children=7,
-            child_branching_angle=48*math.pi/180,
-            child_min_branching_point=0.23
-        ),
-        TreeBranchHyperparameters(
-            length=50.14,
-            radius=0.63,
-            gnarliness=0.25,
-            num_segments=8,
-            num_children=4,
-            child_branching_angle=75*math.pi/180,
-            child_min_branching_point=0.33
-        ),
-        TreeBranchHyperparameters(
-            length=18.51,
-            radius=0.76,
-            gnarliness=0.20,
-            num_segments=6,
-            num_children=3,
-            child_branching_angle=60*math.pi/180,
-            child_min_branching_point=0.0
-        ),
-        TreeBranchHyperparameters(
-            length=8.6,
-            radius=0.70,
-            gnarliness=0.09,
-            num_segments=4
-        )
-'''
-
-###########################
-# Test
-###########################

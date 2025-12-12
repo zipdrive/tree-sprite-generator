@@ -218,6 +218,11 @@ class TreeLeaf:
         self.size = size 
 
 class TreeStructure:
+    seed: int 
+    '''
+    The seed used to generate the tree structure.
+    '''
+
     branch_segments: list[TreeBranchSegment]
     '''
     The branch segments of the tree.
@@ -228,10 +233,19 @@ class TreeStructure:
     The leaves of the tree.
     '''
 
-    def __init__(self, structure_hyperparameters: list[TreeLevelHyperparameters]):
+    def __init__(self, structure_hyperparameters: list[TreeLevelHyperparameters], seed: int | None = None):
         '''
         Generates the tree.
         '''
+
+        # Store the seed used for structure generation
+        if seed != None:
+            self.seed = seed 
+        else:
+            import os
+            random_data = os.urandom(8)
+            self.seed = int.from_bytes(random_data, byteorder="big")
+        random.seed(self.seed)
 
         class TreeBranch:
             level: int 

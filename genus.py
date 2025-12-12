@@ -4,7 +4,7 @@ import datetime
 import os
 import numpy as np
 from structure import TreeLevelHyperparameters, TreeBranchHyperparameters, TreeLeafHyperparameters, TreeStructure
-from graphics import TreeLeafColormapRenderer, TreeLeafNormalmapRenderer, TreeColormapRenderer, TreeNormalmapRenderer, TreeRenderer, Image
+from graphics import TreeLeafColormapRenderer, TreeLeafNormalmapRenderer, TreeColormapRenderer, TreeNormalmapRenderer, TreeSampleRenderer, TreeRenderer, Image
 
 class Genus:
     name: str 
@@ -17,9 +17,19 @@ class Genus:
     The keyframe phases of growth.
     '''
 
-    rendered_image: Image
+    render_with_leaves: list[TreeRenderer] 
     '''
-    The final outputted image.
+    Renders the tree with leaves.
+    '''
+
+    render_bare: list[TreeRenderer]
+    '''
+    Renders only the branches.
+    '''
+
+    render_sample: list[TreeRenderer] 
+    '''
+    Renders a sample of what the tree will look like with a color palette and lighting applied.
     '''
 
     def __init__(self, 
@@ -28,7 +38,10 @@ class Genus:
                     bark_color_texture: str,
                     bark_normalmap_texture: str,
                     bark_heightmap_texture: str,
-                    leaf_color_texture: str
+                    leaf_color_texture: str,
+                    sample_bark_primary_color: tuple[int, int, int],
+                    sample_bark_secondary_color: tuple[int, int, int],
+                    sample_leaf_color: tuple[int, int, int]
                     ):
         '''
         Args:
@@ -42,29 +55,63 @@ class Genus:
         self.name = name
         self.levels = levels
 
-        # Create the renderer
-        self.rendered_image = Image(
-            renderers=[
-                TreeLeafColormapRenderer(bark_color_texture, leaf_color_texture, width=600, height=1200),
-                TreeLeafNormalmapRenderer(bark_normalmap=bark_normalmap_texture, bark_heightmap=bark_heightmap_texture, leafmap=leaf_color_texture, x=600, width=600, height=1200),
-                TreeColormapRenderer(bark_color_texture, zoom=1.0, y=1200, width=600, height=1200),
-                TreeNormalmapRenderer(normalmap=bark_normalmap_texture, heightmap=bark_heightmap_texture, x=600, y=1200, width=600, height=1200)
-            ],
-            width=1200,
-            height=2400
-        )
+        # Create the renderers
+        self.render_with_leaves = [
+                TreeLeafColormapRenderer(bark_color_texture, leaf_color_texture, width=1, height=1),
+                TreeLeafNormalmapRenderer(bark_normalmap=bark_normalmap_texture, bark_heightmap=bark_heightmap_texture, leafmap=leaf_color_texture, x=1, width=1, height=1),
+            ]
+        self.render_bare = [
+                TreeColormapRenderer(bark_color_texture, width=1, height=1),
+                TreeNormalmapRenderer(normalmap=bark_normalmap_texture, heightmap=bark_heightmap_texture, x=1, width=1, height=1),
+            ]
+        self.render_sample = [
+                TreeSampleRenderer(
+                    bark_colormap=bark_color_texture,
+                    bark_normalmap=bark_normalmap_texture,
+                    bark_heightmap=bark_heightmap_texture,
+                    leaf_colormap=leaf_color_texture,
+                    primary_bark_color=sample_bark_primary_color,
+                    secondary_bark_color=sample_bark_secondary_color,
+                    leaf_color=sample_leaf_color
+                )
+            ]
 
 
-    def generate_tree_structure(self, render_full: bool = False) -> TreeStructure:
-        directory: str = f"file/{self.name}/{datetime.datetime.now().timestamp()}"
-        os.makedirs(directory, exist_ok=True)
-
+    def generate_tree_structure(self) -> TreeStructure:
         # Generate the structure
         structure: TreeStructure = TreeStructure(self.levels)
+        print(f"  Completed building structure with seed {structure.seed}.")
 
-        # Render the structure
-        self.rendered_image.render(structure)
-        self.rendered_image.save(f"{directory}/render.png")
+        # Create directory to store the tree files in
+        directory: str = f"file/{self.name}"
+        os.makedirs(directory, exist_ok=True)
+
+        # Use the maximum abs(x) and y coordinates of any branch to determine what the width and height of the generated image should be
+        max_x: float = 0.0
+        max_y: float = 0.0
+        for k in range(len(structure.branch_segments)):
+            branch_segment = structure.branch_segments[k]
+            max_x = max(abs(branch_segment.end.horizontal), max_x)
+            max_y = max(branch_segment.end.vertical - branch_segment.end.depth, max_y)
+        width: int = int(math.ceil(2.0 * max_x)) + 20
+        height: int = int(math.ceil(max_y)) + 40
+
+        # Render tree with leaves
+        self.render_with_leaves[0].width = width 
+        self.render_with_leaves[0].height = height 
+        self.render_with_leaves[1].width = width 
+        self.render_with_leaves[1].height = height
+        self.render_with_leaves[1].x = width
+        render_with_leaves: Image = Image(renderers=self.render_with_leaves)
+        render_with_leaves.render(structure)
+        render_with_leaves.save(f"{directory}/{structure.seed}_leaves.png")
+
+        # Render sample with lighting
+        self.render_sample[0].width = width 
+        self.render_sample[0].height = height 
+        render_sample: Image = Image(renderers=self.render_sample)
+        render_sample.render(structure)
+        render_sample.save(f"{directory}/{structure.seed}_sample.png")
 
         return structure
 
@@ -137,5 +184,8 @@ BIRCH_LARGE: Genus = Genus(
     bark_color_texture='assets/birch/color.png',
     bark_normalmap_texture='assets/birch/normal.png',
     bark_heightmap_texture='assets/birch/height.png',
-    leaf_color_texture='assets/birch/leaf.png'
+    leaf_color_texture='assets/birch/leaf.png',
+    sample_bark_primary_color=(192, 190, 195),
+    sample_bark_secondary_color=(69, 64, 61),
+    sample_leaf_color=(77, 96, 65)
 )

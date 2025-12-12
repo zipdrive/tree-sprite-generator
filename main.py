@@ -1,4 +1,4 @@
 import genus
 
-genus.BIRCH_LARGE.generate_tree_structure(render_full=True)
+genus.BIRCH_LARGE.generate_tree_structure()
 print("Done.")

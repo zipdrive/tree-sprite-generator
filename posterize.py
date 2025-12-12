@@ -5,8 +5,8 @@ import numpy as np
 from sklearn import cluster
 from typing import Any, Literal
 
-original_file: str = 'assets/birch/leaf_untreated.png'
-output_file: str = 'assets/birch/leaf.png'
+original_file: str = 'assets/birch/wood_0027_color_1k.jpg'
+output_file: str = 'assets/birch/color.png'
 
 # Load the image
 original_img: Image.Image = Image.open(original_file).convert('RGBA')
@@ -43,142 +43,39 @@ colors = [
     color_centroids[2, :] / 255.0,
     color_centroids[3, :] / 255.0
 ]
-colors = sorted(colors, key=lambda centroid: functools.reduce(lambda a, b: a + b, [np.linalg.norm(pixel - centroid) for pixel in original_pixel_data], 0.0))
 
-final_colors = []
-final_color_mappings = []
+# Repeatedly reduce color set to a minimal set of non-colinear colors
+final_colors = sorted(colors, key=lambda centroid: functools.reduce(lambda a, b: a + b, [np.linalg.norm(pixel - centroid) for pixel in original_pixel_data], 0.0))
+def try_remove_colinear_color() -> bool:
+    for k in range(2, len(final_colors)):
+        for j in range(1, k):
+            for i in range(0, j):
+                lineij = final_colors[j] - final_colors[i]
+                lineik = final_colors[k] - final_colors[i]
+                colinearity_result = test_colinear(lineij, lineik)
+                if colinearity_result == 'start in middle':
+                    final_colors.pop(i)
+                    return True 
+                elif colinearity_result == 'a_end in middle':
+                    final_colors.pop(j)
+                    return True 
+                elif colinearity_result == 'b_end in middle':
+                    final_colors.pop(k)
+                    return True 
+    return False 
+while try_remove_colinear_color():
+    pass 
+final_color_mappings = [
+    np.array([1.0, 0.0, 0.0, 1.0]),
+    np.array([0.0, 1.0, 0.0, 1.0]),
+    np.array([0.0, 0.0, 1.0, 1.0]),
+    np.array([0.0, 0.0, 0.0, 1.0])
+][0:len(final_colors)]
 
-line01 = colors[1] - colors[0]
-line02 = colors[2] - colors[0]
-colinearity_01_02 = test_colinear(line01, line02)
-if colinearity_01_02 == 'not colinear':
-    for i in range(0, 2):
-        for j in range(i + 1, 3):
-            if len(final_colors) == 0:
-                k: int = 3 - (i + j)
-                lineij = colors[j] - colors[i]
-                linei3 = colors[3] - colors[i]
-                colinearity_ij_i3 = test_colinear(lineij, linei3)
-                if colinearity_ij_i3 == 'not colinear':
-                    continue 
+if len(final_colors) == 2:
+    final_colors.append(0.5 * (final_colors[0] + final_colors[1]))
+    final_color_mappings.append(0.5 * (final_color_mappings[0] + final_color_mappings[1]))
 
-                orth = colors[k]
-                orth_mapping: np.typing.NDArray[np.floating[Any]]
-                end1: np.typing.NDArray[np.floating[Any]]
-                end1_mapping: np.typing.NDArray[np.floating[Any]]
-                end2: np.typing.NDArray[np.floating[Any]]
-                end2_mapping: np.typing.NDArray[np.floating[Any]]
-                middle: np.typing.NDArray[np.floating[Any]]
-
-                if colinearity_ij_i3 == 'start in middle':
-                    end1 = colors[j]
-                    end2 = colors[3]
-                    end2_mapping = np.array([0.0, 0.0, 1.0, 1.0])
-                    if j < k:
-                        end1_mapping = np.array([1.0, 0.0, 0.0, 1.0])
-                        orth_mapping = np.array([0.0, 1.0, 0.0, 1.0])
-                    else:
-                        orth_mapping = np.array([1.0, 0.0, 0.0, 1.0])
-                        end1_mapping = np.array([0.0, 1.0, 0.0, 1.0])
-                elif colinearity_ij_i3 == 'a_end in middle':
-                    end1 = colors[i]
-                    end2 = colors[3]
-                    end2_mapping = np.array([0.0, 0.0, 1.0, 1.0])
-                    if i < k:
-                        end1_mapping = np.array([1.0, 0.0, 0.0, 1.0])
-                        orth_mapping = np.array([0.0, 1.0, 0.0, 1.0])
-                    else:
-                        orth_mapping = np.array([1.0, 0.0, 0.0, 1.0])
-                        end1_mapping = np.array([0.0, 1.0, 0.0, 1.0])
-                elif colinearity_ij_i3 == 'b_end in middle':
-                    end1 = colors[i]
-                    end2 = colors[j]
-                    if j < k:
-                        end1_mapping = np.array([1.0, 0.0, 0.0, 1.0])
-                        end2_mapping = np.array([0.0, 1.0, 0.0, 1.0])
-                        orth_mapping = np.array([0.0, 0.0, 1.0, 1.0])
-                    elif i < k:
-                        end1_mapping = np.array([1.0, 0.0, 0.0, 1.0])
-                        orth_mapping = np.array([0.0, 1.0, 0.0, 1.0])
-                        end2_mapping = np.array([0.0, 0.0, 1.0, 1.0])
-                    else:
-                        orth_mapping = np.array([1.0, 0.0, 0.0, 1.0])
-                        end1_mapping = np.array([0.0, 1.0, 0.0, 1.0])
-                        end2_mapping = np.array([0.0, 0.0, 1.0, 1.0])
-                
-                middle_blend = np.linalg.norm(middle - end1) / np.linalg.norm(end2 - end1)
-                final_colors = [
-                    end1,
-                    end2,
-                    orth,
-                    middle
-                ]
-                final_color_mappings = [
-                    end1_mapping, 
-                    end2_mapping,
-                    orth_mapping,
-                    end1_mapping + ((end2_mapping - end1_mapping) * middle_blend)
-                ]
-    
-    if len(final_colors) == 0:
-        final_colors = colors 
-        final_color_mappings = [
-            np.array([1.0, 0.0, 0.0, 1.0]),
-            np.array([0.0, 1.0, 0.0, 1.0]),
-            np.array([0.0, 0.0, 1.0, 1.0]),
-            np.array([0.0, 0.0, 0.0, 1.0])
-        ]
-else:
-    intermediate_colors = []
-    middle1: np.typing.NDArray[np.floating[Any]]
-    if colinearity_01_02 == 'start in middle':
-        intermediate_colors.append(colors[1])
-        intermediate_colors.append(colors[2])
-        middle1 = colors[0]
-    elif colinearity_01_02 == 'a_end in middle':
-        intermediate_colors.append(colors[0])
-        intermediate_colors.append(colors[2])
-        middle1 = colors[1]
-    elif colinearity_01_02 == 'b_end in middle':
-        intermediate_colors.append(colors[0])
-        intermediate_colors.append(colors[1])
-        middle1 = colors[2]
-    
-    line01 = intermediate_colors[1] - intermediate_colors[0]
-    line03 = colors[3] - intermediate_colors[0]
-    colinearity_01_03 = test_colinear(line01, line03)
-    if colinearity_01_03 == 'not colinear':
-        middle1_blend: float = np.linalg.norm(middle1 - intermediate_colors[0]) / np.linalg.norm(intermediate_colors[1] - intermediate_colors[0])
-        final_colors = [intermediate_colors[0], intermediate_colors[1], colors[3], middle1]
-        final_color_mappings = [
-            np.array([1.0, 0.0, 0.0, 1.0]), 
-            np.array([0.0, 1.0, 0.0, 1.0]),
-            np.array([0.0, 0.0, 1.0, 1.0]),
-            np.array([1.0 - middle1_blend, middle1_blend, 0.0, 1.0])
-        ] 
-    else:
-        end1: np.typing.NDArray[np.floating[Any]]
-        end2: np.typing.NDArray[np.floating[Any]]
-        middle2: np.typing.NDArray[np.floating[Any]]
-        if colinearity_01_03 == 'start in middle':
-            end1, end2 = intermediate_colors[1], colors[3]
-            middle2 = intermediate_colors[0]
-        elif colinearity_01_03 == 'a_end in middle':
-            end1, end2 = intermediate_colors[0], colors[3]
-            middle2 = intermediate_colors[1]
-        elif colinearity_01_03 == 'b_end in middle':
-            end1, end2 = intermediate_colors[0], intermediate_colors[1]
-            middle2 = colors[3]
-        middle1_blend: float = np.linalg.norm(middle1 - end1) / np.linalg.norm(end2 - end1)
-        middle2_blend: float = np.linalg.norm(middle2 - end1) / np.linalg.norm(end2 - end1)
-        final_colors = [end1, end2, middle1, middle2]
-        final_color_mappings = [
-            np.array([1.0, 0.0, 0.0, 1.0]), 
-            np.array([0.0, 1.0, 0.0, 1.0]),
-            np.array([1.0 - middle1_blend, middle1_blend, 0.0, 1.0]),
-            np.array([1.0 - middle2_blend, middle2_blend, 0.0, 1.0])
-        ] 
-    
 
 # Render the transformed color space
 ctx: moderngl.Context = moderngl.create_context(standalone=True)
@@ -197,31 +94,31 @@ void main() {
 }
 ''',
     fragment_shader=
-'''
+f'''
 #version 330
 
 uniform sampler2D tex;
 
-uniform vec4 colors[4]; // The posterization colors.
-uniform vec4 mapped_colors[4]; // The colors that they map to.
+uniform vec4 colors[{len(final_colors)}]; // The posterization colors.
+uniform vec4 mapped_colors[{len(final_color_mappings)}]; // The colors that they map to.
 
 in vec2 v_uv;
 out vec4 f_color;
 
-void main() {
+void main() {{
     vec4 sampled_color = texture(tex, v_uv);
     int best_k = 0;
     float best_k_distance = length(colors[0] - sampled_color);
-    for (int k = 1; k < 4; ++k) {
+    for (int k = 1; k < {len(final_colors)}; ++k) {{
         float k_distance = length(colors[k] - sampled_color);
-        if (k_distance < best_k_distance) {
+        if (k_distance < best_k_distance) {{
             best_k = k;
             best_k_distance = k_distance;
-        }
-    }
+        }}
+    }}
 
     f_color = vec4(mapped_colors[best_k].rgb, sampled_color.a);
-}
+}}
 '''
 )
 

@@ -37,14 +37,17 @@ class Image:
     The renderers for the image.
     '''
 
-    def __init__(self, renderers: list[TreeRenderer], width: int, height: int):
+    def __init__(self, renderers: list[TreeRenderer]):
         '''
         Constructs an empty image.
         '''
         self.renderers = renderers
-        self.width = width
-        self.height = height 
-        self.pixels = [0 for _ in range(4 * width * height)]
+        self.width = 0
+        self.height = 0
+        for k in range(len(renderers)):
+            self.width = max(self.width, renderers[k].x + renderers[k].width)
+            self.height = max(self.height, renderers[k].y + renderers[k].height)
+        self.pixels = [0 for _ in range(4 * self.width * self.height)]
 
     def __getitem__(self, key: tuple[int, int]) -> tuple[int, int, int, int]:
         x, y = key
@@ -568,6 +571,8 @@ void main() {
             fragment_shader='''
 #version 330
 
+#define PI 3.1415926538
+
 uniform sampler2D normalmap_tex;
 uniform sampler2D heightmap_tex;
 in vec3 v_normal;
@@ -576,13 +581,20 @@ out vec4 f_color;
 
 void main() {
     vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
-    vec3 sampled_normal = 2.0 * (texture(normalmap_tex, uv).xyz - 0.5);
-    vec3 axis = cross(v_normal, sampled_normal);
+    vec3 sampled_normal = normalize(texture(normalmap_tex, uv).xzy - 0.5);
+    sampled_normal.y = -sampled_normal.y;
+
+    float v_normal_xy_angle = atan(v_normal.x, -v_normal.y);
+    float v_normal_xy_magn = length(v_normal.xy);
+    float v_normal_z_angle = atan(v_normal.z, v_normal_xy_magn);
+    float v_normal_posterized_xy_angle = round(v_normal_xy_angle * 1.5 / PI) * PI / 1.5;
+    float v_normal_posterized_z_angle = round(v_normal_z_angle * 4.0 / PI) * PI / 4.0;
+    vec3 surface_normal = normalize(vec3(sin(v_normal_posterized_xy_angle), -cos(v_normal_posterized_xy_angle), sin(v_normal_posterized_z_angle)));
+
+    vec3 axis = cross(vec3(0.0, -1.0, 0.0), surface_normal);
     vec3 sampled_normal_parallel = axis * dot(axis, sampled_normal);
     vec3 sampled_normal_perpendicular = sampled_normal - sampled_normal_parallel;
-    vec3 v_normal_parallel = axis * dot(axis, v_normal);
-    vec3 v_normal_perpendicular = v_normal - v_normal_parallel;
-    vec3 true_normal = sampled_normal_parallel + (length(sampled_normal_perpendicular) + normalize(v_normal_perpendicular));
+    vec3 true_normal = sampled_normal_parallel + (length(sampled_normal_perpendicular) * surface_normal);
 
     float sampled_height = texture(heightmap_tex, uv).r;
 
@@ -592,10 +604,10 @@ void main() {
         )
 
         # Load the normalmap texture
-        heightmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.normalmap)
-        heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex)
+        normalmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.normalmap)
+        normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex)
         prog['normalmap_tex'] = 0
-        heightmap_sampler2D.use(0)
+        normalmap_sampler2D.use(0)
 
         # Load the depthmap texture
         heightmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.heightmap)
@@ -661,4 +673,179 @@ void main() {
         leafmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=leafmap_tex)
         prog['leafmap_tex'] = 2
         leafmap_sampler2D.use(2)
+        return prog 
+    
+class TreeSampleRenderer(TreeRenderer):
+    '''
+    Renders what the tree will look like with a color palette and lighting applied.
+    '''
+
+    bark_colormap: str 
+    '''
+    The filename of the bark color texture.
+    '''
+
+    bark_normalmap: str 
+    '''
+    The filename of the bark normal texture.
+    '''
+
+    bark_heightmap: str 
+    '''
+    The filename of the bark height texture.
+    '''
+
+    leaf_colormap: str
+    '''
+    The filename of the leaf color texture.
+    '''
+
+    palette_matrix: np.typing.NDArray[np.floating[Any]]
+    '''
+    Matrix mapping the color palette of the tree.
+    '''
+
+    def __init__(self, bark_colormap: str, bark_normalmap: str, bark_heightmap: str, leaf_colormap: str, primary_bark_color: tuple[int, int, int], secondary_bark_color: tuple[int, int, int], leaf_color: tuple[int, int, int], zoom = 1, x = 0, y = 0, width = 300, height = 400):
+        super().__init__(zoom, x, y, width, height)
+        self.bark_colormap = bark_colormap
+        self.bark_normalmap = bark_normalmap
+        self.bark_heightmap = bark_heightmap
+        self.leaf_colormap = leaf_colormap
+        self.palette_matrix = np.array([
+            [primary_bark_color[0] / 255.0, primary_bark_color[1] / 255.0, primary_bark_color[2] / 255.0, 0.0],
+            [secondary_bark_color[0] / 255.0, secondary_bark_color[1] / 255.0, secondary_bark_color[2] / 255.0, 0.0],
+            [leaf_color[0] / 255.0, leaf_color[1] / 255.0, leaf_color[2] / 255.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0]
+        ])
+
+    def create_branch_program(self, ctx):
+        prog: moderngl.Program = ctx.program(
+            vertex_shader='''
+#version 330
+
+uniform mat4 proj_matrix;
+in vec3 in_pos;
+in vec3 in_normal;
+in vec2 in_uv;
+out vec3 v_normal;
+out vec2 v_uv;
+
+void main() {
+    gl_Position = proj_matrix * vec4(in_pos, 1.0);
+    v_normal = in_normal;
+    v_uv = in_uv;
+}
+''',
+            fragment_shader='''
+#version 330
+
+#define PI 3.1415926538
+
+uniform sampler2D colormap_tex;
+uniform sampler2D normalmap_tex;
+uniform sampler2D heightmap_tex;
+uniform mat4 palette;
+in vec3 v_normal;
+in vec2 v_uv;
+out vec4 f_color;
+
+void main() {
+    vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
+
+    vec4 untransformed_sampled_color = texture(colormap_tex, uv);
+    vec4 sampled_color = palette * vec4(untransformed_sampled_color.rgb, 1.0);
+    vec3 sampled_normal = normalize(texture(normalmap_tex, uv).xzy - 0.5);
+    sampled_normal.y = -sampled_normal.y;
+
+    float v_normal_xy_angle = atan(v_normal.x, -v_normal.y);
+    float v_normal_xy_magn = length(v_normal.xy);
+    float v_normal_z_angle = atan(v_normal.z, v_normal_xy_magn);
+    float v_normal_posterized_xy_angle = round(v_normal_xy_angle * 1.5 / PI) * PI / 1.5;
+    float v_normal_posterized_z_angle = round(v_normal_z_angle * 4.0 / PI) * PI / 4.0;
+    vec3 surface_normal = normalize(vec3(sin(v_normal_posterized_xy_angle), -cos(v_normal_posterized_xy_angle), sin(v_normal_posterized_z_angle)));
+
+    vec3 axis = cross(vec3(0.0, -1.0, 0.0), surface_normal);
+    vec3 sampled_normal_parallel = axis * dot(axis, sampled_normal);
+    vec3 sampled_normal_perpendicular = sampled_normal - sampled_normal_parallel;
+    vec3 true_normal = sampled_normal_parallel + (length(sampled_normal_perpendicular) * surface_normal);
+
+    float sampled_height = texture(heightmap_tex, uv).r;
+    float depth_shadow_factor = clamp(2.0 * sampled_height, 0.0, 1.0);
+
+    f_color = vec4(sampled_color.rgb * dot(true_normal, normalize(vec3(0.5, -1.0, 1.0))) * depth_shadow_factor, untransformed_sampled_color.a);
+}
+'''
+        )
+
+        # Set the color palette
+        prog['palette'].write(self.palette_matrix.astype('f4').tobytes())
+
+        # Load the colormap texture
+        colormap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.bark_colormap)
+        colormap_sampler2D: moderngl.Sampler = ctx.sampler(texture=colormap_tex)
+        prog['colormap_tex'] = 0
+        colormap_sampler2D.use(0)
+
+        # Load the normalmap texture
+        normalmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.bark_normalmap)
+        normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex)
+        prog['normalmap_tex'] = 1
+        normalmap_sampler2D.use(1)
+
+        # Load the depthmap texture
+        heightmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.bark_heightmap)
+        heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex)
+        prog['heightmap_tex'] = 2
+        heightmap_sampler2D.use(2)
+
+        return prog 
+    
+    def create_leaf_program(self, ctx):
+        prog: moderngl.Program = ctx.program(
+            vertex_shader=
+'''
+#version 330
+
+uniform mat4 proj_matrix;
+in vec3 in_pos;
+in vec3 in_normal;
+in vec2 in_uv;
+out vec3 v_normal;
+out vec2 v_uv;
+
+void main() {
+    gl_Position = proj_matrix * vec4(in_pos, 1.0);
+    v_normal = in_normal;
+    v_uv = in_uv;
+}
+''',
+            fragment_shader=
+'''
+#version 330
+
+uniform sampler2D leafmap_tex;
+uniform mat4 palette;
+in vec3 v_normal;
+in vec2 v_uv;
+out vec4 f_color;
+
+void main() {
+    vec4 untransformed_sampled_color = texture(leafmap_tex, v_uv);
+    vec4 sampled_color = palette * vec4(untransformed_sampled_color.rgb, 1.0);
+
+    f_color = vec4(sampled_color.rgb * dot(v_normal, normalize(vec3(-0.5, -1.0, 1.0))), untransformed_sampled_color.a);
+}
+'''
+        )
+
+        # Set the color palette
+        prog['palette'].write(self.palette_matrix.astype('f4').tobytes())
+
+        # Load the leafmap texture
+        img: PILImage.Image = PILImage.open(self.leaf_colormap).convert('RGBA')
+        self.leaf_texture_ratio = img.height / img.width
+        leafmap_tex: moderngl.Texture = ctx.texture((img.width, img.height), 4, data=img.tobytes())
+        leafmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=leafmap_tex)
+        prog['leafmap_tex'] = 3
+        leafmap_sampler2D.use(3)
         return prog 

@@ -7,7 +7,7 @@ from PIL import Image as PILImage
 import moderngl
 from typing import Any, Generator
 from util import Vector
-from structure import TreeBranchSegment, TreeStructure
+from structure import TreeBranchSegment, TreeLeaf, TreeStructure
 
 def read_file_into_texture(ctx: moderngl.Context, filename: str) -> moderngl.Texture:
     '''
@@ -103,6 +103,11 @@ class TreeRenderer:
     width: int 
     height: int 
 
+    leaf_texture_ratio: float = 1.0
+    '''
+    The ratio of height:width of the leaf texture.
+    '''
+
     def __init__(self, zoom: float = 1.0, x: int = 0, y: int = 0, width: int = 300, height: int = 400):
         self.zoom = zoom
         self.x = x 
@@ -116,6 +121,12 @@ class TreeRenderer:
         '''
         pass
 
+    def create_leaf_program(self, ctx: moderngl.Context) -> moderngl.Program | None:
+        '''
+        Creates the program used for rendering leaves.
+        '''
+        return None
+
     def render(self, structure: TreeStructure, img: Image):
         '''
         Renders the tree to a PNG file.
@@ -126,13 +137,13 @@ class TreeRenderer:
         '''
         # Set up the context
         ctx: moderngl.Context = moderngl.create_context(standalone=True)
-        ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
-        prog: moderngl.Program = self.create_branch_program(ctx)
+        ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE | moderngl.BLEND)
+        branch_prog: moderngl.Program = self.create_branch_program(ctx)
 
         # Initialize the projection matrix
         width = img.width if self.width == 0 else self.width 
         height = img.height if self.height == 0 else self.height 
-        prog['proj_matrix'].write(
+        branch_prog['proj_matrix'].write(
             np.array([
                 [2.0 * self.zoom / width, 0.0, 0.0, 0.0],
                 [0.0, -2.0 * self.zoom / height, 0.0, 0.0],
@@ -229,47 +240,138 @@ class TreeRenderer:
             return vertices
 
         # Construct the vertices
-        vertices: list[Vertex] = []
+        branch_vertices: list[Vertex] = []
         for k in range(len(structure.branch_segments)):
-            vertices += geometrize_branch_segment(structure.branch_segments[k])
+            branch_vertices += geometrize_branch_segment(structure.branch_segments[k])
         
-        prog_attrs: list = []
-        if 'in_pos' in prog:
+        branch_prog_attrs: list = []
+        if 'in_pos' in branch_prog:
             vertex_data = np.dstack(
                 [
-                    [vertices[k].pos.horizontal for k in range(len(vertices))],
-                    [vertices[k].pos.vertical for k in range(len(vertices))],
-                    [vertices[k].pos.depth for k in range(len(vertices))]
+                    [branch_vertices[k].pos.horizontal for k in range(len(branch_vertices))],
+                    [branch_vertices[k].pos.vertical for k in range(len(branch_vertices))],
+                    [branch_vertices[k].pos.depth for k in range(len(branch_vertices))]
                 ]
             )
             vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
-            prog_attrs.append((vbo, '3f', 'in_pos'))
-        if 'in_normal' in prog:
+            branch_prog_attrs.append((vbo, '3f', 'in_pos'))
+        if 'in_normal' in branch_prog:
             vertex_data = np.dstack(
                 [
-                    [vertices[k].normal.horizontal for k in range(len(vertices))],
-                    [vertices[k].normal.depth for k in range(len(vertices))],
-                    [vertices[k].normal.vertical for k in range(len(vertices))]
+                    [branch_vertices[k].normal.horizontal for k in range(len(branch_vertices))],
+                    [branch_vertices[k].normal.depth for k in range(len(branch_vertices))],
+                    [branch_vertices[k].normal.vertical for k in range(len(branch_vertices))]
                 ]
             )
             vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
-            prog_attrs.append((vbo, '3f', 'in_normal'))
-        if 'in_uv' in prog:
+            branch_prog_attrs.append((vbo, '3f', 'in_normal'))
+        if 'in_uv' in branch_prog:
             vertex_data = np.dstack(
                 [
-                    [vertices[k].uv[0] for k in range(len(vertices))],
-                    [vertices[k].uv[1] for k in range(len(vertices))]
+                    [branch_vertices[k].uv[0] for k in range(len(branch_vertices))],
+                    [branch_vertices[k].uv[1] for k in range(len(branch_vertices))]
                 ]
             )
             vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
-            prog_attrs.append((vbo, '2f', 'in_uv'))
-        vao: moderngl.VertexArray = ctx.vertex_array(prog, prog_attrs)
+            branch_prog_attrs.append((vbo, '2f', 'in_uv'))
+        branch_vao: moderngl.VertexArray = ctx.vertex_array(branch_prog, branch_prog_attrs)
 
+        # Construct program and vertices for leaves
+        leaf_prog: moderngl.Program | None = self.create_leaf_program(ctx)
+        leaf_vao: moderngl.VertexArray | None = None 
+        if leaf_prog != None:
+            # Set the projection matrix
+            leaf_prog['proj_matrix'].write(
+                np.array([
+                    [2.0 * self.zoom / width, 0.0, 0.0, 0.0],
+                    [0.0, -2.0 * self.zoom / height, 0.0, 0.0],
+                    [0.0, -0.0005, 0.002, 0.0],
+                    [0.0, 1.0 - (15.0 * self.zoom / height), 0.0, 1.0]
+                ]).astype('f4').tobytes()
+            )
+
+            # Create the leaf geometry
+            def geometrize_leaf(leaf: TreeLeaf) -> list[Vertex]:
+                normal: Vector = Vector.construct(depth=1.0)
+                axis1: Vector = leaf.dir
+                axis2: Vector = normal.cross(axis1)
+                normal = axis2.cross(axis1)
+                return [
+                    Vertex(
+                        pos=leaf.anchor - (0.5 * leaf.size * axis2),
+                        normal=normal,
+                        uv=(0.0, 1.0)
+                    ),
+                    Vertex(
+                        pos=leaf.anchor + (leaf.size * axis1) + (0.5 * leaf.size * axis2),
+                        normal=normal,
+                        uv=(1.0, 0.0)
+                    ),
+                    Vertex(
+                        pos=leaf.anchor + (0.5 * leaf.size * axis2),
+                        normal=normal,
+                        uv=(1.0, 1.0)
+                    ),
+                    Vertex(
+                        pos=leaf.anchor - (0.5 * leaf.size * axis2),
+                        normal=normal,
+                        uv=(0.0, 1.0)
+                    ),
+                    Vertex(
+                        pos=leaf.anchor + (leaf.size * axis1) - (0.5 * leaf.size * axis2),
+                        normal=normal,
+                        uv=(0.0, 0.0)
+                    ),
+                    Vertex(
+                        pos=leaf.anchor + (leaf.size * axis1) + (0.5 * leaf.size * axis2),
+                        normal=normal,
+                        uv=(1.0, 0.0)
+                    ),
+                ]
+            
+            leaf_vertices: list[Vertex] = []
+            for k in range(len(structure.leaves)):
+                leaf_vertices += geometrize_leaf(structure.leaves[k])
+
+            leaf_prog_attrs: list = []
+            if 'in_pos' in leaf_prog:
+                vertex_data = np.dstack(
+                    [
+                        [leaf_vertices[k].pos.horizontal for k in range(len(leaf_vertices))],
+                        [leaf_vertices[k].pos.vertical for k in range(len(leaf_vertices))],
+                        [leaf_vertices[k].pos.depth for k in range(len(leaf_vertices))]
+                    ]
+                )
+                vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
+                leaf_prog_attrs.append((vbo, '3f', 'in_pos'))
+            if 'in_normal' in leaf_prog:
+                vertex_data = np.dstack(
+                    [
+                        [leaf_vertices[k].normal.horizontal for k in range(len(leaf_vertices))],
+                        [leaf_vertices[k].normal.depth for k in range(len(leaf_vertices))],
+                        [leaf_vertices[k].normal.vertical for k in range(len(leaf_vertices))]
+                    ]
+                )
+                vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
+                leaf_prog_attrs.append((vbo, '3f', 'in_normal'))
+            if 'in_uv' in leaf_prog:
+                vertex_data = np.dstack(
+                    [
+                        [leaf_vertices[k].uv[0] for k in range(len(leaf_vertices))],
+                        [leaf_vertices[k].uv[1] for k in range(len(leaf_vertices))]
+                    ]
+                )
+                vbo: moderngl.Buffer = ctx.buffer(vertex_data.astype('f4').tobytes())
+                leaf_prog_attrs.append((vbo, '2f', 'in_uv'))
+            leaf_vao = ctx.vertex_array(leaf_prog, leaf_prog_attrs)
+            
         # Do the rendering in the standalone context
         fbo: moderngl.Framebuffer = ctx.simple_framebuffer((width, height))
         fbo.use()
         fbo.clear()
-        vao.render(moderngl.TRIANGLES)
+        branch_vao.render(moderngl.TRIANGLES)
+        if leaf_vao != None:
+            leaf_vao.render(moderngl.TRIANGLES)
 
         # Write the render onto a PNG image
         pixels: np.typing.NDArray[np.floating[Any]] = np.frombuffer(fbo.read(components=4, dtype='f4'), dtype='f4').reshape((width * height, 4))
@@ -321,7 +423,7 @@ void main() {
 '''
         )
     
-class TreeBarkRenderer(TreeRenderer):
+class TreeColormapRenderer(TreeRenderer):
     '''
     A renderer that renders the flat bark texture.
     '''
@@ -372,6 +474,61 @@ void main() {
         prog['barkmap_tex'] = 0
         barkmap_sampler2D.use(0)
         return prog 
+    
+class TreeLeafColormapRenderer(TreeColormapRenderer):
+    '''
+    A renderer that renders flat bark and leaf textures.
+    '''
+
+    leafmap: str
+    '''
+    The filename of the leaf texture.
+    '''
+
+    def __init__(self, barkmap: str, leafmap: str, zoom = 1, x = 0, y = 0, width = 300, height = 400):
+        super().__init__(barkmap, zoom, x, y, width, height)
+        self.leafmap = leafmap
+
+    def create_leaf_program(self, ctx):
+        prog: moderngl.Program = ctx.program(
+            vertex_shader=
+'''
+#version 330
+
+uniform mat4 proj_matrix;
+in vec3 in_pos;
+in vec3 in_normal;
+in vec2 in_uv;
+out vec2 v_uv;
+
+void main() {
+    gl_Position = proj_matrix * vec4(in_pos, 1.0);
+    v_uv = in_uv;
+}
+''',
+            fragment_shader=
+'''
+#version 330
+
+uniform sampler2D leafmap_tex;
+in vec2 v_uv;
+out vec4 f_color;
+
+void main() {
+    vec4 sampled_color = texture(leafmap_tex, v_uv);
+    f_color = sampled_color;
+}
+'''
+        )
+
+        # Load the leafmap texture
+        img: PILImage.Image = PILImage.open(self.leafmap).convert('RGBA')
+        self.leaf_texture_ratio = img.height / img.width
+        leafmap_tex: moderngl.Texture = ctx.texture((img.width, img.height), 4, data=img.tobytes())
+        leafmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=leafmap_tex)
+        prog['leafmap_tex'] = 1
+        leafmap_sampler2D.use(1)
+        return prog 
 
 class TreeNormalmapRenderer(TreeRenderer):
     '''
@@ -419,7 +576,7 @@ out vec4 f_color;
 
 void main() {
     vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
-    vec3 sampled_normal = texture(normalmap_tex, uv).xyz;
+    vec3 sampled_normal = 2.0 * (texture(normalmap_tex, uv).xyz - 0.5);
     vec3 axis = cross(v_normal, sampled_normal);
     vec3 sampled_normal_parallel = axis * dot(axis, sampled_normal);
     vec3 sampled_normal_perpendicular = sampled_normal - sampled_normal_parallel;
@@ -446,4 +603,62 @@ void main() {
         prog['heightmap_tex'] = 1
         heightmap_sampler2D.use(1)
 
+        return prog 
+    
+class TreeLeafNormalmapRenderer(TreeNormalmapRenderer):
+    '''
+    A renderer that renders the normalmap for bark and leaf textures.
+    '''
+
+    leafmap: str
+    '''
+    The filename of the leaf texture.
+    '''
+
+    def __init__(self, bark_normalmap: str, bark_heightmap: str, leafmap: str, zoom = 1, x = 0, y = 0, width = 300, height = 400):
+        super().__init__(bark_normalmap, bark_heightmap, zoom, x, y, width, height)
+        self.leafmap = leafmap
+
+    def create_leaf_program(self, ctx):
+        prog: moderngl.Program = ctx.program(
+            vertex_shader=
+'''
+#version 330
+
+uniform mat4 proj_matrix;
+in vec3 in_pos;
+in vec3 in_normal;
+in vec2 in_uv;
+out vec3 v_normal;
+out vec2 v_uv;
+
+void main() {
+    gl_Position = proj_matrix * vec4(in_pos, 1.0);
+    v_normal = in_normal;
+    v_uv = in_uv;
+}
+''',
+            fragment_shader=
+'''
+#version 330
+
+uniform sampler2D leafmap_tex;
+in vec3 v_normal;
+in vec2 v_uv;
+out vec4 f_color;
+
+void main() {
+    vec4 sampled_color = texture(leafmap_tex, v_uv);
+    f_color = vec4(0.5 * (vec3(1.0, 1.0, 1.0) + v_normal), sampled_color.a);
+}
+'''
+        )
+
+        # Load the leafmap texture
+        img: PILImage.Image = PILImage.open(self.leafmap).convert('RGBA')
+        self.leaf_texture_ratio = img.height / img.width
+        leafmap_tex: moderngl.Texture = ctx.texture((img.width, img.height), 4, data=img.tobytes())
+        leafmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=leafmap_tex)
+        prog['leafmap_tex'] = 2
+        leafmap_sampler2D.use(2)
         return prog 

@@ -6,9 +6,9 @@ from typing import Callable, Self, Any
 from util import Vector
 
 class TreeBranchHyperparameters:
-    parent_length: float
+    parent_segment_length: float
     '''
-    The length of the parent branch.
+    The length of each segment of the parent branch.
     '''
 
     parent_radius: float 
@@ -48,7 +48,7 @@ class TreeBranchHyperparameters:
 
     tropism_vec: Vector
     '''
-    The tropism vector that influences the weight.
+    The tropism vector that influences the orientation of the branch segments.
     '''
 
     tropism_factor: float 
@@ -81,7 +81,7 @@ class TreeBranchHyperparameters:
             tropism_vector (np.typing.NDArray[np.floating[Any]]): A direction that the branch will grow towards.
             tropism_factor (float): The strength of the tropism vector.
         '''
-        self.parent_length = length / num_segments
+        self.parent_segment_length = length / num_segments
         self.parent_radius = radius
         self.parent_radius_taper = radius_tapering
         self.parent_gnarliness = gnarliness
@@ -93,7 +93,44 @@ class TreeBranchHyperparameters:
         self.tropism_factor = tropism_factor
 
 class TreeLeafHyperparameters:
-    pass
+    minimum_size: float 
+    '''
+    The minimum size of the leaves.
+    '''
+
+    maximum_size: float 
+    '''
+    The maximum size of the leaves.
+    '''
+
+    density: float 
+    '''
+    The average density of leaves on the branch.
+    '''
+
+    tropism_plane: Vector 
+    '''
+    The vector perpendicular to the tropism plane influencing the leaf orientation.
+    '''
+
+    tropism_factor: float 
+    '''
+    The weight of the tropism.
+    '''
+
+    def __init__(self, density: float, minimum_size: float, maximum_size: float | None = None, tropism_plane: Vector = Vector.construct(horizontal=1.0), tropism_factor: float = 0.025):
+        self.minimum_size = minimum_size
+        self.maximum_size = maximum_size if maximum_size != None else minimum_size
+        self.density = density
+        self.tropism_plane = tropism_plane
+        self.tropism_factor = tropism_factor
+
+    @property
+    def average_size(self) -> float:
+        '''
+        The average size of the leaves.
+        '''
+        return 0.5 * (self.minimum_size + self.maximum_size)
 
 class TreeLevelHyperparameters:
     branch: TreeBranchHyperparameters
@@ -105,6 +142,10 @@ class TreeLevelHyperparameters:
     '''
     The hyperparameters for leaf generation.
     '''
+
+    def __init__(self, branch: TreeBranchHyperparameters, leaves: TreeLeafHyperparameters | None = None):
+        self.branch = branch
+        self.leaves = leaves if leaves != None else TreeLeafHyperparameters(0.0, 0.0)
 
 
 
@@ -147,6 +188,34 @@ class TreeBranchSegment:
         True if the segment is on the end of the branch.
         '''
         return self.next_segment == None
+    
+    @property 
+    def end(self) -> Vector:
+        '''
+        The terminal end of the branch.
+        '''
+        return self.start + self.vec 
+
+class TreeLeaf:
+    anchor: Vector 
+    '''
+    The point where the leaf is anchored.
+    '''
+
+    dir: Vector 
+    '''
+    The direction that the leaf is pointing towards.
+    '''
+
+    size: float 
+    '''
+    The size of the leaf.
+    '''
+
+    def __init__(self, anchor: Vector, dir: Vector, size: float):
+        self.anchor = anchor
+        self.dir = dir 
+        self.size = size 
 
 class TreeStructure:
     branch_segments: list[TreeBranchSegment]
@@ -154,13 +223,15 @@ class TreeStructure:
     The branch segments of the tree.
     '''
 
+    leaves: list[TreeLeaf]
+    '''
+    The leaves of the tree.
+    '''
+
     def __init__(self, structure_hyperparameters: list[TreeLevelHyperparameters]):
         '''
         Generates the tree.
         '''
-
-        branch_hyperparameters: list[TreeBranchHyperparameters] = [structure_hyperparameters[k].branch for k in range(len(structure_hyperparameters))]
-        leaf_hyperparameters: list[TreeLeafHyperparameters] = [structure_hyperparameters[k].leaves for k in range(len(structure_hyperparameters))]
 
         class TreeBranch:
             level: int 
@@ -178,6 +249,7 @@ class TreeStructure:
                 self.segments = []
 
         self.branch_segments = []
+        self.leaves = []
         branch_queue: list[TreeBranch] = []
         
         def generate_branch(parent: TreeBranch | None = None, resume_from_end: bool = False) -> TreeBranch | None:
@@ -240,15 +312,37 @@ class TreeStructure:
             for k in range(child_branch_hyperparameters.parent_segments):
                 next_segment: TreeBranchSegment = TreeBranchSegment(
                     start=next_segment_start,
-                    vec=next_segment_orientation * child_branch_hyperparameters.parent_length,
+                    vec=next_segment_orientation * child_branch_hyperparameters.parent_segment_length,
                     radius=next_segment_radius
                 )
                 if len(child.segments) > 0:
                     child.segments[-1].next_segment = next_segment
+                elif resume_from_end and len(parent.segments) > 0:
+                    parent.segments[-1].next_segment = next_segment
                 child.segments.append(next_segment)
 
+                # Generate leaves attached to that branch segment
+                if child_leaf_hyperparameters.density > 0.0 and not np.isclose(child_leaf_hyperparameters.density, 0.0) and not np.isclose(child_leaf_hyperparameters.average_size, 0.0):
+                    max_leaf_count: int = int(round(child_branch_hyperparameters.parent_segment_length / (0.125 * child_leaf_hyperparameters.average_size)))
+                    for _ in range(max_leaf_count):
+                        if random.random() < child_leaf_hyperparameters.density:
+                            # Create leaf
+                            outward_dir: Vector = next_segment_orientation.cross(Vector.construct(horizontal=1.0)).rotate(axis=next_segment_orientation, angle=math.tau * random.random())
+                            tangent_dir: Vector = outward_dir.cross(next_segment_orientation)
+                            axial_dist: float = random.random()
+                            leaf_anchor: Vector = next_segment.start + (axial_dist * next_segment.vec) + \
+                                ((next_segment.radius_base + (axial_dist * (next_segment.radius_end - next_segment.radius_base))) * outward_dir)
+                            leaf_dir_random: Vector = outward_dir.rotate(axis=tangent_dir, angle=(random.random() * math.tau / 3.0) - (math.tau / 6.0))
+                            leaf_dir_trop: Vector = (outward_dir - outward_dir.dot(child_leaf_hyperparameters.tropism_plane) * child_leaf_hyperparameters.tropism_plane).normalize()
+                            leaf: TreeLeaf = TreeLeaf(
+                                anchor=leaf_anchor,
+                                dir=(leaf_dir_random * (1.0 - child_leaf_hyperparameters.tropism_factor)) + (leaf_dir_trop * child_leaf_hyperparameters.tropism_factor),
+                                size=child_leaf_hyperparameters.minimum_size + (random.random() * (child_leaf_hyperparameters.maximum_size - child_leaf_hyperparameters.minimum_size))
+                            )
+                            self.leaves.append(leaf)
+
                 # Determine the start of the next segment
-                next_segment_start = next_segment.start + next_segment.vec
+                next_segment_start = next_segment.end
 
                 # Taper the radius of the next segment
                 next_segment_radius = base_radius * (1.0 - child_branch_hyperparameters.parent_radius_taper * k / child_branch_hyperparameters.parent_segments)
@@ -264,8 +358,6 @@ class TreeStructure:
                     )
                 next_segment_orientation = (child_branch_hyperparameters.tropism_factor * child_branch_hyperparameters.tropism_vec) + ((1.0 - child_branch_hyperparameters.tropism_factor) * next_segment_orientation)
             
-            if resume_from_end and len(parent.segments) > 0:
-                parent.segments[-1].next_segment = child.segments[0]
 
             return child 
         

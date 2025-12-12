@@ -5,8 +5,8 @@ import numpy as np
 from sklearn import cluster
 from typing import Any, Literal
 
-original_file: str = 'assets/basic/wood_0063_color_1k.jpg'
-output_file: str = 'assets/basic/color.png'
+original_file: str = 'assets/ash/leaf_untreated.png'
+output_file: str = 'assets/ash/leaf.png'
 
 # Load the image
 original_img: Image.Image = Image.open(original_file).convert('RGBA')

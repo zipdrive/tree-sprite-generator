@@ -121,23 +121,26 @@ class Genus:
             img_bare.save(f"{directory}/{structure.seed}_bare.png")
 
         # Save metadata for the tree with/without leaves
-        metadata_with_leaves: dict = {}
-        metadata_with_leaves['palette'] = {}
-        metadata_with_leaves['palette']['x'] = 0
-        metadata_with_leaves['palette']['y'] = 0
-        metadata_with_leaves['palette']['width'] = width 
-        metadata_with_leaves['palette']['height'] = height
-        metadata_with_leaves['normalmap'] = {}
-        metadata_with_leaves['normalmap']['x'] = width
-        metadata_with_leaves['normalmap']['y'] = 0
-        metadata_with_leaves['normalmap']['width'] = width 
-        metadata_with_leaves['normalmap']['height'] = height
+        metadata: dict = {}
+        metadata['palette'] = {}
+        metadata['palette']['x'] = 0
+        metadata['palette']['y'] = 0
+        metadata['palette']['width'] = width 
+        metadata['palette']['height'] = height
+        metadata['normalmap'] = {}
+        metadata['normalmap']['x'] = width
+        metadata['normalmap']['y'] = 0
+        metadata['normalmap']['width'] = width 
+        metadata['normalmap']['height'] = height
+        metadata['center'] = {}
+        metadata['center']['x'] = 0.5 * width
+        metadata['center']['y'] = height - 0.5 * structure.branch_segments[0].radius_base
         if render_leaves:
             with open(f"{directory}/{structure.seed}_leaves.json", 'w') as metadata_with_leaves_file:
-                metadata_with_leaves_file.write(json.dumps(metadata_with_leaves))
+                metadata_with_leaves_file.write(json.dumps(metadata))
         if render_bare:
             with open(f"{directory}/{structure.seed}_bare.json", 'w') as metadata_bare_file:
-                metadata_bare_file.write(json.dumps(metadata_with_leaves))
+                metadata_bare_file.write(json.dumps(metadata))
 
         # Render sample with lighting
         if render_sample:
@@ -150,9 +153,7 @@ class Genus:
         return structure
 
 
-###########################
-# Birch trees
-###########################
+#region Birch trees
 
 BIRCH_YOUNG: Genus = Genus( 
     name='Betula', 
@@ -291,11 +292,11 @@ BIRCH_OLD: Genus = Genus(
     sample_leaf_color=(223, 133, 0)#(77, 96, 65)
 )
 
-###########################
-# Ash trees
-###########################
+#endregion
 
-ASH_LARGE: Genus = Genus( 
+#region Ash trees
+
+ASH_OLD: Genus = Genus( 
     name='Fraxinus', 
     levels=[
         TreeLevelHyperparameters(
@@ -357,3 +358,5 @@ ASH_LARGE: Genus = Genus(
     sample_bark_secondary_color=(161, 154, 138),
     sample_leaf_color=(130, 154, 6)
 )
+
+#endregion

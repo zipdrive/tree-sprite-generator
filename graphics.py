@@ -150,8 +150,8 @@ class TreeRenderer:
             np.array([
                 [2.0 * self.zoom / width, 0.0, 0.0, 0.0],
                 [0.0, -2.0 * self.zoom / height, 0.0, 0.0],
-                [0.0, -0.0005, 0.002, 0.0],
-                [0.0, 1.0 - (15.0 * self.zoom / height), 0.0, 1.0]
+                [0.0, -1.0 * self.zoom / height, 0.002, 0.0],
+                [0.0, 1.0 - (structure.branch_segments[0].radius_base * self.zoom / height), 0.0, 1.0]
             ]).astype('f4').tobytes()
         )
 
@@ -284,14 +284,7 @@ class TreeRenderer:
         leaf_vao: moderngl.VertexArray | None = None 
         if leaf_prog != None:
             # Set the projection matrix
-            leaf_prog['proj_matrix'].write(
-                np.array([
-                    [2.0 * self.zoom / width, 0.0, 0.0, 0.0],
-                    [0.0, -2.0 * self.zoom / height, 0.0, 0.0],
-                    [0.0, -0.0005, 0.002, 0.0],
-                    [0.0, 1.0 - (15.0 * self.zoom / height), 0.0, 1.0]
-                ]).astype('f4').tobytes()
-            )
+            leaf_prog['proj_matrix'].write(branch_prog['proj_matrix'].read())
 
             # Create the leaf geometry
             def geometrize_leaf(leaf: TreeLeaf) -> list[Vertex]:
@@ -464,7 +457,7 @@ in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
+    vec2 uv = vec2(v_uv.x + sqrt(0.001) * v_uv.y, v_uv.y);
     vec4 sampled_color = texture(barkmap_tex, uv);
     f_color = sampled_color;
 }
@@ -581,7 +574,7 @@ in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
+    vec2 uv = vec2(v_uv.x + sqrt(0.001) * v_uv.y, v_uv.y);
     float noise = texture(noise_tex, uv).r;
     
     vec3 sampled_normal = vec3(0.0, 1.0, 0.0);// normalize(texture(normalmap_tex, uv).xzy - 0.5);
@@ -760,7 +753,7 @@ in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    vec2 uv = vec2(v_uv.x + sqrt(0.75) * v_uv.y, v_uv.y);
+    vec2 uv = vec2(v_uv.x + sqrt(0.001) * v_uv.y, v_uv.y);
     float noise = texture(noise_tex, uv).r;
     
     vec4 untransformed_sampled_color = texture(colormap_tex, uv);

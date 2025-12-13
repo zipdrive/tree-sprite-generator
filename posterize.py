@@ -5,8 +5,8 @@ import numpy as np
 from sklearn import cluster
 from typing import Any, Literal
 
-original_file: str = 'assets/birch/wood_0027_color_1k.jpg'
-output_file: str = 'assets/birch/color.png'
+original_file: str = 'assets/basic/wood_0063_color_1k.jpg'
+output_file: str = 'assets/basic/color.png'
 
 # Load the image
 original_img: Image.Image = Image.open(original_file).convert('RGBA')
@@ -45,7 +45,7 @@ colors = [
 ]
 
 # Repeatedly reduce color set to a minimal set of non-colinear colors
-final_colors = sorted(colors, key=lambda centroid: functools.reduce(lambda a, b: a + b, [np.linalg.norm(pixel - centroid) for pixel in original_pixel_data], 0.0))
+final_colors = colors.copy()
 def try_remove_colinear_color() -> bool:
     for k in range(2, len(final_colors)):
         for j in range(1, k):
@@ -65,6 +65,23 @@ def try_remove_colinear_color() -> bool:
     return False 
 while try_remove_colinear_color():
     pass 
+
+# Sort the final colors by the number of corresponding pixels
+final_color_pixel_count: list[int] = [0 for _ in range(len(final_colors))]
+for pixel in original_pixel_data:
+    closest_color_idx = 0
+    closest_color_diff = np.linalg.norm(pixel - final_colors[0])
+    for k in range(1, len(final_colors)):
+        color_diff = np.linalg.norm(pixel - final_colors[k])
+        if color_diff < closest_color_diff:
+            closest_color_diff = color_diff
+            closest_color = k
+    final_color_pixel_count[closest_color_idx] += 1
+
+_, final_colors = zip(*sorted(zip(final_color_pixel_count, final_colors)))
+final_colors = list(final_colors)
+
+# Map each color to one of RED, GREEN, BLUE, BLACK
 final_color_mappings = [
     np.array([1.0, 0.0, 0.0, 1.0]),
     np.array([0.0, 1.0, 0.0, 1.0]),

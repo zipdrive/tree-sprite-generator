@@ -16,6 +16,11 @@ class TreeBranchHyperparameters:
     The radius of the parent branch.
     '''
 
+    parent_radius_flare: float 
+    '''
+    How flared the parent branch is at the base.
+    '''
+
     parent_radius_taper: float 
     '''
     The overall tapering of the radius of the parent branch.
@@ -59,6 +64,7 @@ class TreeBranchHyperparameters:
     def __init__(self,
         length: float,
         radius: float,
+        radius_flare: float = 1.5,
         radius_tapering: float = 0.7,
         gnarliness: float = 0.05,
         num_segments: int = 7,
@@ -72,6 +78,7 @@ class TreeBranchHyperparameters:
         Args:
             length (float): The length of the branch.
             radius (float): The radius of the branch.
+            radius_flare (float): How much the radius is flared at the base, as a percentage (>=1.0) of the radius.
             radius_tapering (float): How much the branch tapers down by the end.
             gnarliness (float): How twisted and gnarled the branch gets. 0 is ungnarled, 1 is very gnarled.
             num_segments (int): How many segments there are in the branch.
@@ -83,6 +90,7 @@ class TreeBranchHyperparameters:
         '''
         self.parent_segment_length = length / num_segments
         self.parent_radius = radius
+        self.parent_radius_flare = radius * radius_flare
         self.parent_radius_taper = radius_tapering
         self.parent_gnarliness = gnarliness
         self.parent_segments = num_segments
@@ -315,12 +323,12 @@ class TreeStructure:
                             axis=parent_orientation,
                             angle=random.random() * math.tau
                         )
-                    next_segment_radius: float = base_radius
+                    next_segment_radius: float = child_branch_hyperparameters.parent_radius_flare * parent.segments[q].radius_base
             else:
                 # No parent, so generate a basic trunk
                 next_segment_start = Vector.construct()
                 next_segment_orientation = Vector.construct(vertical=1.0)
-                next_segment_radius: float = base_radius
+                next_segment_radius: float = child_branch_hyperparameters.parent_radius_flare
 
             # Create each segment of the branch
             for k in range(child_branch_hyperparameters.parent_segments):

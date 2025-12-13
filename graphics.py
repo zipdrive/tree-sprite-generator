@@ -575,19 +575,22 @@ void main() {
 
 uniform sampler2D normalmap_tex;
 uniform sampler2D heightmap_tex;
+uniform sampler2D noise_tex;
 in vec3 v_normal;
 in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
     vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
-    vec3 sampled_normal = normalize(texture(normalmap_tex, uv).xzy - 0.5);
+    float noise = texture(noise_tex, uv).r;
+    
+    vec3 sampled_normal = vec3(0.0, 1.0, 0.0);// normalize(texture(normalmap_tex, uv).xzy - 0.5);
     sampled_normal.y = -sampled_normal.y;
 
-    float v_normal_xy_angle = atan(v_normal.x, -v_normal.y);
+    float v_normal_xy_angle = atan(v_normal.x, -v_normal.y) + (noise * PI / 8.0) - (PI / 16.0);
     float v_normal_xy_magn = length(v_normal.xy);
     float v_normal_z_angle = atan(v_normal.z, v_normal_xy_magn);
-    float v_normal_posterized_xy_angle = round(v_normal_xy_angle * 1.5 / PI) * PI / 1.5;
+    float v_normal_posterized_xy_angle = round(v_normal_xy_angle * 4.0 / PI) * PI / 4.0;
     float v_normal_posterized_z_angle = round(v_normal_z_angle * 4.0 / PI) * PI / 4.0;
     vec3 surface_normal = normalize(vec3(sin(v_normal_posterized_xy_angle), -cos(v_normal_posterized_xy_angle), sin(v_normal_posterized_z_angle)));
 
@@ -606,7 +609,7 @@ void main() {
         # Load the normalmap texture
         normalmap_tex: moderngl.Texture = read_file_into_texture(ctx, filename=self.normalmap)
         normalmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=normalmap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
-        prog['normalmap_tex'] = 0
+        #prog['normalmap_tex'] = 0
         normalmap_sampler2D.use(0)
 
         # Load the depthmap texture
@@ -614,6 +617,12 @@ void main() {
         heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
         prog['heightmap_tex'] = 1
         heightmap_sampler2D.use(1)
+
+        # Load the noise texture
+        noise_tex: moderngl.Texture = read_file_into_texture(ctx, filename='assets/noise.png')
+        noise_sampler2D: moderngl.Sampler = ctx.sampler(texture=noise_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
+        prog['noise_tex'] = 4
+        noise_sampler2D.use(4)
 
         return prog 
     
@@ -744,23 +753,25 @@ void main() {
 uniform sampler2D colormap_tex;
 uniform sampler2D normalmap_tex;
 uniform sampler2D heightmap_tex;
+uniform sampler2D noise_tex;
 uniform mat4 palette;
 in vec3 v_normal;
 in vec2 v_uv;
 out vec4 f_color;
 
 void main() {
-    vec2 uv = vec2(v_uv.x + sqrt(3.0) * v_uv.y, v_uv.y);
-
+    vec2 uv = vec2(v_uv.x + sqrt(0.75) * v_uv.y, v_uv.y);
+    float noise = texture(noise_tex, uv).r;
+    
     vec4 untransformed_sampled_color = texture(colormap_tex, uv);
     vec4 sampled_color = palette * vec4(untransformed_sampled_color.rgb, 1.0);
     vec3 sampled_normal = vec3(0.0, 1.0, 0.0);// normalize(texture(normalmap_tex, uv).xzy - 0.5);
     sampled_normal.y = -sampled_normal.y;
 
-    float v_normal_xy_angle = atan(v_normal.x, -v_normal.y);
+    float v_normal_xy_angle = atan(v_normal.x, -v_normal.y) + (noise * PI / 8.0) - (PI / 16.0);
     float v_normal_xy_magn = length(v_normal.xy);
     float v_normal_z_angle = atan(v_normal.z, v_normal_xy_magn);
-    float v_normal_posterized_xy_angle = round(v_normal_xy_angle * 5.0 / PI) * PI / 5.0;
+    float v_normal_posterized_xy_angle = round(v_normal_xy_angle * 4.0 / PI) * PI / 4.0;
     float v_normal_posterized_z_angle = round(v_normal_z_angle * 4.0 / PI) * PI / 4.0;
     vec3 surface_normal = normalize(vec3(sin(v_normal_posterized_xy_angle), -cos(v_normal_posterized_xy_angle), sin(v_normal_posterized_z_angle)));
 
@@ -798,6 +809,12 @@ void main() {
         heightmap_sampler2D: moderngl.Sampler = ctx.sampler(texture=heightmap_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
         prog['heightmap_tex'] = 2
         heightmap_sampler2D.use(2)
+
+        # Load the noise texture
+        noise_tex: moderngl.Texture = read_file_into_texture(ctx, filename='assets/noise.png')
+        noise_sampler2D: moderngl.Sampler = ctx.sampler(texture=noise_tex, filter=(moderngl.NEAREST, moderngl.NEAREST), min_lod=0, max_lod=0)
+        prog['noise_tex'] = 4
+        noise_sampler2D.use(4)
 
         return prog 
     

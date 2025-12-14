@@ -41,6 +41,11 @@ class TreeBranchHyperparameters:
     How many branches should sprout from the parent branch.
     '''
 
+    end_child_num: int
+    '''
+    How many of the aforementioned child branches should sprout from the terminal end of the parent branch.
+    '''
+
     child_angle: float 
     '''
     The angle at which lateral child branches should sprout from the parent branch.
@@ -64,11 +69,12 @@ class TreeBranchHyperparameters:
     def __init__(self,
         length: float,
         radius: float,
-        radius_flare: float = 1.5,
+        radius_flare: float = 2.0,
         radius_tapering: float = 0.7,
         gnarliness: float = 0.05,
         num_segments: int = 7,
         num_children: int = 0,
+        num_children_on_end: int = 1,
         child_branching_angle: float = math.pi / 3,
         child_min_branching_point: float = 0.3,
         tropism_vector: Vector = Vector.construct(vertical=1.0),
@@ -83,6 +89,7 @@ class TreeBranchHyperparameters:
             gnarliness (float): How twisted and gnarled the branch gets. 0 is ungnarled, 1 is very gnarled.
             num_segments (int): How many segments there are in the branch.
             num_children (int): How many branches branch from this one.
+            num_children_on_end (int): How many of those branches branch from the terminal end of this one (e.g. set to 2 for bifurcation).
             child_branching_angle (float): The angle at which branches branch from this one.
             child_min_branching_point (float): Child branches will not sprout between the start of the branch and this point (relative to the start and end of the branch). 0 allows child branches to sprout anywhere on the branch, 0.5 only allows child branches to sprout starting halfway down the branch, and so on.
             tropism_vector (np.typing.NDArray[np.floating[Any]]): A direction that the branch will grow towards.
@@ -95,6 +102,7 @@ class TreeBranchHyperparameters:
         self.parent_gnarliness = gnarliness
         self.parent_segments = num_segments
         self.child_num = num_children
+        self.end_child_num = min(num_children_on_end, num_children)
         self.child_angle = child_branching_angle
         self.min_branching_point = child_min_branching_point
         self.tropism_vec = tropism_vector
@@ -274,7 +282,7 @@ class TreeStructure:
         self.leaves = []
         branch_queue: list[TreeBranch] = []
         
-        def generate_branch(parent: TreeBranch | None = None, resume_from_end: bool = False) -> TreeBranch | None:
+        def generate_branch(parent: TreeBranch | None = None, remaining_end_child_orientations: list[float] = []) -> TreeBranch | None:
             '''
             Generates a tree branch.
             '''
@@ -289,22 +297,22 @@ class TreeStructure:
             next_segment_orientation: Vector
             base_radius: float = child_branch_hyperparameters.parent_radius
             if parent != None:
+                parent_branch_hyperparameters: TreeBranchHyperparameters = structure_hyperparameters[parent.level].branch
                 parent_orientation: Vector 
-                if resume_from_end and len(parent.segments) > 0:
+                if len(remaining_end_child_orientations) > 0 and len(parent.segments) > 0:
                     next_segment_start = parent.segments[-1].start + parent.segments[-1].vec
                     parent_orientation = parent.segments[-1].vec.normalize()
                     next_segment_orientation = parent_orientation.rotate(
                             axis=parent_orientation.cross(Vector.construct(horizontal=1.0)),
-                            angle=random.random() * child_branch_hyperparameters.parent_gnarliness * math.pi / 2
+                            angle=parent_branch_hyperparameters.child_angle
                         ).rotate(
                             axis=parent_orientation,
-                            angle=random.random() * math.tau
+                            angle=remaining_end_child_orientations[0]
                         )
                     next_segment_radius: float = parent.segments[-1].radius_end
-                    base_radius = parent.segments[-1].radius_end
+                    base_radius *= parent.segments[-1].radius_end
                 else:
                     # Randomly generate a branching point
-                    parent_branch_hyperparameters: TreeBranchHyperparameters = structure_hyperparameters[parent.level].branch
                     min_branching_point: float = len(parent.segments) * parent_branch_hyperparameters.min_branching_point
                     max_branching_point: float = len(parent.segments)
                     ratio: float = min_branching_point + ((max_branching_point - min_branching_point) * random.random())
@@ -339,7 +347,7 @@ class TreeStructure:
                 )
                 if len(child.segments) > 0:
                     child.segments[-1].next_segment = next_segment
-                elif resume_from_end and len(parent.segments) > 0:
+                elif len(remaining_end_child_orientations) == 1 and len(parent.segments) > 0:
                     parent.segments[-1].next_segment = next_segment
                 child.segments.append(next_segment)
 
@@ -380,7 +388,8 @@ class TreeStructure:
                     )
                 next_segment_orientation = (child_branch_hyperparameters.tropism_factor * child_branch_hyperparameters.tropism_vec) + ((1.0 - child_branch_hyperparameters.tropism_factor) * next_segment_orientation)
             
-
+            if len(remaining_end_child_orientations) > 0:
+                remaining_end_child_orientations.pop(0)
             return child 
         
         trunk: TreeBranch | None = generate_branch()
@@ -393,7 +402,13 @@ class TreeStructure:
 
             # Generate new branches
             parent_branch_hyperparameters: TreeBranchHyperparameters = structure_hyperparameters[parent.level].branch
-            for _ in range(parent_branch_hyperparameters.child_num):
-                child: TreeBranch | None = generate_branch(parent, len(parent.segments) > 0 and parent.segments[-1].is_end_cap)
+            remaining_end_child_orientations: list[float] = []
+            for _ in range(parent_branch_hyperparameters.end_child_num):
+                if len(remaining_end_child_orientations) == 0:
+                    remaining_end_child_orientations.append(random.random() * math.tau)
+                else: 
+                    remaining_end_child_orientations.append(remaining_end_child_orientations[-1] + (math.tau / parent_branch_hyperparameters.end_child_num))
+            for k in range(parent_branch_hyperparameters.child_num):
+                child: TreeBranch | None = generate_branch(parent, remaining_end_child_orientations)
                 if child != None:
                     branch_queue.append(child)

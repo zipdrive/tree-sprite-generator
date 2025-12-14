@@ -163,7 +163,7 @@ class TreeRenderer:
             dir0: Vector = segment.vec.normalize()
             orth00: Vector = dir0.cross(Vector.construct(depth=1.0))
             orth01: Vector = dir0.cross(orth00) # orth01 is orth00 rotated 90 degrees counterclockwise around dir
-            radial_segments: int = 8
+            radial_segments: int = max(8, int(round(segment.radius_base / 3)))
             angle: float = 0.0
             u: float
             v0: float
@@ -280,8 +280,10 @@ class TreeRenderer:
         branch_vao: moderngl.VertexArray = ctx.vertex_array(branch_prog, branch_prog_attrs)
 
         # Construct program and vertices for leaves
-        leaf_prog: moderngl.Program | None = self.create_leaf_program(ctx)
+        leaf_prog: moderngl.Program | None = None
         leaf_vao: moderngl.VertexArray | None = None 
+        if len(structure.leaves) > 0:
+            leaf_prog = self.create_leaf_program(ctx)
         if leaf_prog != None:
             # Set the projection matrix
             leaf_prog['proj_matrix'].write(branch_prog['proj_matrix'].read())

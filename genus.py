@@ -294,59 +294,86 @@ BIRCH_OLD: Genus = Genus(
     sample_leaf_color=(223, 133, 0)#(77, 96, 65)
 )
 
+BIRCH_ALL: list[Genus] = [BIRCH_YOUNG, BIRCH_OLD]
+
 #endregion
 
-#region Ash trees
+#region Willow trees
 
-ASH_OLD: Genus = Genus( 
-    name='Fraxinus', 
+WILLOW_YOUNG: Genus = Genus( 
+    name='Salix', 
     levels=[
         TreeLevelHyperparameters(
             branch=TreeBranchHyperparameters(
-                length=100.47,
-                radius=30.0,
+                length=75.47,
+                radius=10.0,
+                radius_flare=1.3,
                 radius_tapering=0.1,
-                gnarliness=0.05,
+                gnarliness=0.6,
                 num_segments=4,
-                num_children=3,
-                child_branching_angle=80*math.pi/180,
-                child_min_branching_point=0.8,
+                num_children=2,
+                num_children_on_end=1,
+                child_branching_angle=30*math.pi/180,
+                child_min_branching_point=0.7,
                 tropism_factor=0.3
             )
         ),
         TreeLevelHyperparameters(
             branch=TreeBranchHyperparameters(
-                length=100.14,
-                radius=0.75,
+                length=75.14,
+                radius=0.55,
+                radius_tapering=0.4,
+                gnarliness=0.6,
+                num_segments=4,
+                num_children=4,
+                child_branching_angle=30*math.pi/180,
+                child_min_branching_point=0.2,
+                tropism_factor=0.3
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=60.14,
+                radius=0.7,
                 radius_tapering=0.2,
-                gnarliness=0.2,
-                num_segments=8,
-                num_children=6,
-                child_branching_angle=75*math.pi/180,
-                child_min_branching_point=0.33,
+                gnarliness=0.6,
+                num_segments=10,
+                num_children=4,
+                child_branching_angle=60*math.pi/180,
+                child_min_branching_point=0.3,
                 tropism_factor=0.1
             )
         ),
         TreeLevelHyperparameters(
             branch=TreeBranchHyperparameters(
-                length=40.51,
+                length=45.14,
                 radius=0.4,
-                gnarliness=0.20,
-                num_segments=6,
-                num_children=3,
-                child_branching_angle=60*math.pi/180,
-                child_min_branching_point=0.0
+                radius_tapering=0.2,
+                gnarliness=0.4,
+                num_segments=5,
+                num_children=4,
+                num_children_on_end=0,
+                child_branching_angle=48*math.pi/180,
+                child_min_branching_point=0.0,
+                tropism_factor=0.15
+            ),
+            leaves=TreeLeafHyperparameters(
+                density=1.0,
+                minimum_size=6.0,
+                maximum_size=8.0
             )
         ),
         TreeLevelHyperparameters(
             branch=TreeBranchHyperparameters(
-                length=8.6,
-                radius=0.70,
-                gnarliness=0.09,
-                num_segments=4
+                length=60.14,
+                radius=0.4,
+                gnarliness=0.4,
+                num_segments=8,
+                tropism_vector=Vector.construct(vertical=-1.0),
+                tropism_factor=0.6
             ),
             leaves=TreeLeafHyperparameters(
-                density=0.975,
+                density=1.0,
                 minimum_size=3.0,
                 maximum_size=5.0
             )
@@ -360,5 +387,307 @@ ASH_OLD: Genus = Genus(
     sample_bark_secondary_color=(161, 154, 138),
     sample_leaf_color=(130, 154, 6)
 )
+
+WILLOW_OLD: Genus = Genus( 
+    name='Salix', 
+    levels=[
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=75.47,
+                radius=30.0,
+                radius_flare=1.3,
+                radius_tapering=0.1,
+                gnarliness=0.05,
+                num_segments=4,
+                num_children=3,
+                num_children_on_end=3,
+                child_branching_angle=45*math.pi/180,
+                child_min_branching_point=0.7,
+                tropism_factor=0.3
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=100.14,
+                radius=0.55,
+                radius_flare=1.3,
+                radius_tapering=0.4,
+                gnarliness=0.3,
+                num_segments=3,
+                num_children=4,
+                num_children_on_end=2,
+                child_branching_angle=30*math.pi/180,
+                child_min_branching_point=0.0
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=125.14,
+                radius=0.7,
+                radius_flare=1.3,
+                radius_tapering=0.2,
+                gnarliness=0.6,
+                num_segments=10,
+                num_children=3,
+                num_children_on_end=3,
+                child_branching_angle=30*math.pi/180,
+                child_min_branching_point=0.0,
+                tropism_factor=0.1
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=175.14,
+                radius=0.55,
+                radius_flare=1.3,
+                radius_tapering=0.9,
+                gnarliness=0.6,
+                num_segments=12,
+                num_children=5,
+                num_children_on_end=0,
+                child_branching_angle=60*math.pi/180,
+                child_min_branching_point=0.0,
+                tropism_factor=0.05
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=60.14,
+                radius=0.4,
+                radius_tapering=0.2,
+                gnarliness=0.4,
+                num_segments=5,
+                num_children=5,
+                num_children_on_end=0,
+                child_branching_angle=48*math.pi/180,
+                child_min_branching_point=0.0,
+                tropism_vector=Vector.construct(vertical=-1.0),
+                tropism_factor=0.05
+            ),
+            leaves=TreeLeafHyperparameters(
+                density=1.0,
+                minimum_size=6.0,
+                maximum_size=8.0
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=60.14,
+                radius=0.4,
+                gnarliness=0.4,
+                num_segments=8,
+                tropism_vector=Vector.construct(vertical=-1.0),
+                tropism_factor=0.6
+            ),
+            leaves=TreeLeafHyperparameters(
+                density=1.0,
+                minimum_size=3.0,
+                maximum_size=5.0
+            )
+        )
+    ],
+    bark_color_texture='assets/basic/color.png',
+    bark_normalmap_texture='assets/basic/normal.png',
+    bark_heightmap_texture='assets/basic/height.png',
+    leaf_color_texture='assets/ash/leaf.png',
+    sample_bark_primary_color=(82, 76, 64),
+    sample_bark_secondary_color=(161, 154, 138),
+    sample_leaf_color=(130, 154, 6)
+)
+
+WILLOW_ALL: list[Genus] = [WILLOW_YOUNG, WILLOW_OLD]
+
+#endregion
+
+#region Ash trees
+
+ASH_YOUNG: Genus = Genus( 
+    name='Fraxinus', 
+    levels=[
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=75.47,
+                radius=10.0,
+                radius_flare=1.3,
+                radius_tapering=0.1,
+                gnarliness=0.6,
+                num_segments=4,
+                num_children=2,
+                num_children_on_end=1,
+                child_branching_angle=30*math.pi/180,
+                child_min_branching_point=0.7,
+                tropism_factor=0.3
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=75.14,
+                radius=0.55,
+                radius_tapering=0.4,
+                gnarliness=0.6,
+                num_segments=4,
+                num_children=4,
+                child_branching_angle=30*math.pi/180,
+                child_min_branching_point=0.2,
+                tropism_factor=0.3
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=60.14,
+                radius=0.7,
+                radius_tapering=0.2,
+                gnarliness=0.6,
+                num_segments=10,
+                num_children=4,
+                child_branching_angle=60*math.pi/180,
+                child_min_branching_point=0.3,
+                tropism_factor=0.1
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=45.14,
+                radius=0.4,
+                radius_tapering=0.2,
+                gnarliness=0.4,
+                num_segments=5,
+                num_children=4,
+                num_children_on_end=0,
+                child_branching_angle=48*math.pi/180,
+                child_min_branching_point=0.0,
+                tropism_factor=0.15
+            ),
+            leaves=TreeLeafHyperparameters(
+                density=1.0,
+                minimum_size=6.0,
+                maximum_size=8.0
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=30.14,
+                radius=0.4,
+                gnarliness=0.4,
+                num_segments=2
+            ),
+            leaves=TreeLeafHyperparameters(
+                density=1.0,
+                minimum_size=3.0,
+                maximum_size=5.0
+            )
+        )
+    ],
+    bark_color_texture='assets/basic/color.png',
+    bark_normalmap_texture='assets/basic/normal.png',
+    bark_heightmap_texture='assets/basic/height.png',
+    leaf_color_texture='assets/ash/leaf.png',
+    sample_bark_primary_color=(82, 76, 64),
+    sample_bark_secondary_color=(161, 154, 138),
+    sample_leaf_color=(130, 154, 6)
+)
+
+ASH_OLD: Genus = Genus( 
+    name='Fraxinus', 
+    levels=[
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=75.47,
+                radius=30.0,
+                radius_flare=1.3,
+                radius_tapering=0.1,
+                gnarliness=0.05,
+                num_segments=4,
+                num_children=3,
+                num_children_on_end=3,
+                child_branching_angle=45*math.pi/180,
+                child_min_branching_point=0.7,
+                tropism_factor=0.3
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=100.14,
+                radius=0.55,
+                radius_tapering=0.4,
+                gnarliness=0.3,
+                num_segments=3,
+                num_children=4,
+                num_children_on_end=2,
+                child_branching_angle=30*math.pi/180,
+                child_min_branching_point=0.0
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=125.14,
+                radius=0.7,
+                radius_tapering=0.2,
+                gnarliness=0.6,
+                num_segments=10,
+                num_children=3,
+                num_children_on_end=3,
+                child_branching_angle=30*math.pi/180,
+                child_min_branching_point=0.0,
+                tropism_factor=0.1
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=175.14,
+                radius=0.55,
+                radius_tapering=0.9,
+                gnarliness=0.6,
+                num_segments=12,
+                num_children=5,
+                num_children_on_end=0,
+                child_branching_angle=60*math.pi/180,
+                child_min_branching_point=0.0,
+                tropism_factor=0.05
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=60.14,
+                radius=0.4,
+                radius_tapering=0.2,
+                gnarliness=0.4,
+                num_segments=5,
+                num_children=5,
+                num_children_on_end=0,
+                child_branching_angle=48*math.pi/180,
+                child_min_branching_point=0.0,
+                tropism_factor=0.15
+            ),
+            leaves=TreeLeafHyperparameters(
+                density=1.0,
+                minimum_size=6.0,
+                maximum_size=8.0
+            )
+        ),
+        TreeLevelHyperparameters(
+            branch=TreeBranchHyperparameters(
+                length=30.14,
+                radius=0.4,
+                gnarliness=0.4,
+                num_segments=2
+            ),
+            leaves=TreeLeafHyperparameters(
+                density=1.0,
+                minimum_size=3.0,
+                maximum_size=5.0
+            )
+        )
+    ],
+    bark_color_texture='assets/basic/color.png',
+    bark_normalmap_texture='assets/basic/normal.png',
+    bark_heightmap_texture='assets/basic/height.png',
+    leaf_color_texture='assets/ash/leaf.png',
+    sample_bark_primary_color=(82, 76, 64),
+    sample_bark_secondary_color=(161, 154, 138),
+    sample_leaf_color=(130, 154, 6)
+)
+
+ASH_ALL: list[Genus] = [ASH_YOUNG, ASH_OLD]
 
 #endregion
